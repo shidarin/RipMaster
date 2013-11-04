@@ -10,3 +10,5 @@ Has crash protection- in that if you have it startup on login, will pick up wher
 Needs lots of love. Consider buggy. Needs to be broken into modules.
 
 Current docs lie- there is no .ini file or configuration. Variables are hard coded into the master .py file. This is bad.
+
+Style guideline is modified PEP-8 (more docstrings)
