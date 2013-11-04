@@ -8,3 +8,5 @@ Wrote because I was sick of my machine crashing on overnight Handbrake encodes.
 Has crash protection- in that if you have it startup on login, will pick up where it left off during the crash (can be buggy on long lists of encodes)
 
 Needs lots of love. Consider buggy. Needs to be broken into modules.
+
+Current docs lie- there is no .ini file or configuration. Variables are hard coded into the master .py file. This is bad.
