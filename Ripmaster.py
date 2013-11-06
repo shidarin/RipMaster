@@ -168,23 +168,16 @@ strings in the best fashion. I am sorry.
 
 # Standard Imports
 import os
-import cPickle as pickle
 from ast import literal_eval
+
+# Ripmaster Imports
+from apps import handBrake, mkvExtract, mkvInfo, bdSup2Sub
 
 #===============================================================================
 # VARIABLES
-#===============================================================================
+#==============================================================================
 
-# TO BE REPLACED BY FILE READ
-
-# Java
-java = '"C:/Program Files (x86)/Java/jre7/bin/java"'
-
-# BDSup2Sub.jar
-BD = '"C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar"'
-
-# HandBrake CLI
-HandBrake = 'C:/Program Files/Handbrake/HandBrakeCLI.exe'
+# TODO: Replace this stuff with a read from the .ini file
 
 # Quality Read
 baseQual = {
@@ -286,136 +279,6 @@ def convert_filename(movieFile):
 
     return string_escape, directory, instruction
 
-# CLI Commands
-
-def mkvExtract(file, command, dest):
-    """System command builder for extracting tracks with mkvextract
-
-    Args:
-        file: (str)
-            The source file the tracks are to be extracted from.
-
-        command: (str)
-            The track command to be executed. Usually looks like: '3:'.
-
-        dest: (str)
-            The destination file to be written to.
-
-    Raises:
-        N/A
-
-    Returns:
-        N/A
-
-    The full filepath this builds should look like:
-
-    '"mkvextract tracks I:/src/fold/file.mkv 3:I:/dest/fold/subtitle.sup "'
-
-    """
-    os.system('"mkvextract tracks ' + file + ' ' + command + dest + ' "')
-
-def mkvInfo(file):
-
-    # mkvMerge will return a listing of each track
-    info = os.popen('"mkvmerge -i ' + file + '"').read()
-    info = info.split('\n')
-
-    # info is now a list, each entry a line
-    #
-    # Example:
-    #
-    # File 'I:\Rips\RawBR\Jack_Reacher\Jack_Reacher_t01.mkv': container: Matroska
-    # Track ID 0: video (V_MPEG4/ISO/AVC)
-    # Track ID 1: audio (A_AC3)
-    # Track ID 2: audio (A_TRUEHD)
-    # Track ID 3: subtitles (S_HDMV/PGS)
-
-    AUDIO_TYPES = {
-        '(A_AAC)\r': 'aac',
-        '(A_DTS)\r': 'dts',
-        '(A_AC3)\r': 'ac3',
-        '(A_TRUEHD)\r': 'truehd',
-        '(A_MP3)\r': 'mp3',
-        '(A_MS/ACM)\r': 'acm',
-        }
-
-    SUBTITLE_TYPES = {
-        '(S_VOBSUB)\r': 'vobsub',
-        '(S_HDMV/PGS)\r': 'pgs'
-        }
-
-    trackList = []
-
-    for line in info:
-        if 'Track ID' in line:
-            trackList.append(line)
-
-    # trackList now only contains the lines with Track in them
-
-    subtitleTracks = {}
-    audioTracks = {}
-    videoTracks = [] # No plans to use video tracks for now
-
-    for line in trackList:
-         # Splitting on ':' gives us the ID on one side, the type on the other
-        lineList = line.split(':')
-
-        if 'subtitles' in lineList[1]:
-            TrackID = int(lineList[0].replace('Track ID ', ''))
-            subtitleTracks[TrackID] = lineList[1].replace(' subtitles ', '')
-            subtitleTracks[TrackID] = SUBTITLE_TYPES[subtitleTracks[TrackID]]
-
-        elif 'audio' in lineList[1]:
-            TrackID = int(lineList[0].replace('Track ID ', ''))
-            audioTracks[TrackID] = lineList[1].replace(' audio ', '')
-            audioTracks[TrackID] = AUDIO_TYPES[audioTracks[TrackID]]
-
-        elif 'video' in lineList[1]:
-            videoTracks.append(int(lineList[0].replace('Track ID ', '')))
-
-    return videoTracks, audioTracks, subtitleTracks
-
-def bdSup2Sub(file, options, dest, popen=False):
-    """System command builder for converting susbtitles with BDSup2Sub
-
-    Args:
-        file: (str)
-            The source file the subtitles must be converted from.
-
-        options: (str)
-            Resolution, Forced Only and other CLI commands for BDSup2Sub
-
-        dest: (str)
-            Destination filename to be written to. If a pair of files, BDSup2Sub
-            will automatically write the paired file based off this string.
-
-        popen=False: (Boolean)
-            If True, os.popen will be used rather than os.system, and the read()
-            method will be returned, rather than just executed.
-
-    Raises:
-        N/A
-
-    Returns:
-        If popen=True, the console output of BDSup2Sub will be returned as a
-        list.
-
-    """
-    c = '"' + java + ' -jar ' + BD + ' ' +  options +\
-        ' -o ' + dest + ' ' + file + '"'
-
-    if popen:
-        return os.popen(c).read().split('\n')
-    else:
-        os.system(c)
-
-def handBrake(file, options, dest):
-    c = '""' + HandBrake + '"' + ' -i ' + file + ' -o ' + dest + ' ' + \
-        options + '"'
-    print "HandBrake Settings:"
-    print c
-    os.system(c)
-
 # Program Functions
 
 def extract_tracks(file, directory):
@@ -493,6 +356,8 @@ def convert_subtitles(file, instruction):
     # the entire subtitle track is forced, so we remove the resultFiles
     # and create a new FORCED .idx
     for line in shellOut:
+
+        totalCount = 0
 
         if line.startswith('#'):
             lineList = line.split(' ')
