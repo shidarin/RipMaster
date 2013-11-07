@@ -68,30 +68,31 @@ Sample Ripmaster.ini file:
 
 ================================================================================
 
-<Java>C:/Program Files (x86)/Java/jre7/bin/java
-<BDSupToSub>C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-<HandbrakeCLI>C:/Program Files/Handbrake/HandBrakeCLI.exe
+Java = C:/Program Files (x86)/Java/jre7/bin/java
+BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
 
-<x264 Speed>slow
-<Baseline Quality>
-    <1080p>20
-    <720p>20
-    <480p>20
-<High Quality>
-    <1080p>19
-    <720p>19
-    <480p>19
-<Ultra Quality>
-    <1080p>10
+x264 Speed = slow
+Baseline Quality
+    1080p = 20
+    720p = 20
+    480p = 20
+High Quality
+    1080p = 19
+    720p = 19
+    480p = 19
+Ultra Quality
+    1080p = 10
+    720p = 10
+    480p = 10
 
-<LANG>English
-
-<MOVIES>
-I:\Rips\RawBR\This_Is_40\This_Is_40__720lq.mkv
-I:\Rips\RawBR\Cloud_Atlas\Cloud_Atlas__1080.mkv
-</MOVIES>
+Language = English
 
 ================================================================================
+
+Leading and trailing whitespaces are automatically removed, but all entries
+are case sensitive. Make sure there's still a space between the argument
+and the '=' sign.
 
 Users need to Rip their own movies from disk, preferably using MakeMKV, then
 they need to decide on how they want each movie processed, editing the .mkv
@@ -176,29 +177,6 @@ from apps import handBrake, mkvExtract, mkvInfo, bdSup2Sub
 #===============================================================================
 # VARIABLES
 #==============================================================================
-
-# TODO: Replace this stuff with a read from the .ini file
-
-# Quality Read
-baseQual = {
-    1080: 24,
-    720: 24,
-    480: 20
-    }
-highQual = {
-    1080: 22,
-    720: 20,
-    480: 19
-    }
-ultraQual = {
-    1080: 10
-    }
-
-speed = 'slow'
-
-language = 'English'
-
-# END FILE READ SECTION
 
 # Valid Instructions
 INSTRUCTIONS = {

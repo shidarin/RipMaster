@@ -136,7 +136,7 @@ def mkvInfo(file):
     # trackList now only contains the lines with Track in them
 
     subtitleTracks = {}
-    audioTracks = {}
+    audioTracks = []
     videoTracks = [] # No plans to use video tracks for now
 
     for line in trackList:
@@ -149,9 +149,10 @@ def mkvInfo(file):
             subtitleTracks[TrackID] = SUBTITLE_TYPES[subtitleTracks[TrackID]]
 
         elif 'audio' in lineList[1]:
-            TrackID = int(lineList[0].replace('Track ID ', ''))
-            audioTracks[TrackID] = lineList[1].replace(' audio ', '')
-            audioTracks[TrackID] = AUDIO_TYPES[audioTracks[TrackID]]
+            track = AudioTrack(file)
+            track.trackID = int(lineList[0].replace('Track ID ', ''))
+            track.fileType = AUDIO_TYPES[lineList[1].replace(' audio ', '')]
+            audioTracks.append(track)
 
         elif 'video' in lineList[1]:
             videoTracks.append(int(lineList[0].replace('Track ID ', '')))
