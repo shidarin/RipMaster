@@ -212,6 +212,22 @@ INSTRUCTIONS = {
 
 # Utility
 
+def get_movies(dir):
+    """Gets the movies from the specified directory"""
+    movielist = []
+
+    directories = os.listdir(dir)
+    for d in directories:
+        # We need to remove directories without instruction sets
+        if '__' not in d:
+            directories.remove(d)
+            continue
+        files = os.listdir("{root}/{subdir}".format(root=dir, subdir=d))
+        for f in files:
+            if '--converted' not in f and '.mkv' in f:
+                fullpath = os.path.join(dir, d, f).replace('\\', '/')
+                movie = objects.Movie(filepath, )
+
 def convert_filename(movieFile):
     """Converts movie filename to: safe filename, directory, and instructions
 

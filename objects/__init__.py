@@ -15,8 +15,6 @@
 # PRIVATE FUNCTIONS
 #===============================================================================
 
-def _getDir
-
 def _stripAndRemove(string, remove=None):
     """Strips whitespace and optional chars from both sides of the target string.
 
@@ -155,9 +153,7 @@ class audioTrack(object):
 
     """
     def __init__(self, movie, trackID, fileType):
-        from os import path
-        self.sourceFile = movie.sourceFile
-        self.directory = path.split(movie.sourceFile)[0]
+        self.movie = movie
         self.trackID = trackID
         self.fileType = fileType
         self.extracted = False
@@ -166,7 +162,7 @@ class audioTrack(object):
     def setDestination(self):
         """Sets the destination for the extracted audio track"""
         self.extractedAudio = "{dir}/Track{ID}_audio.{type}".format(
-            dir=self.directory,
+            dir=os.path.join(self.movie.root, self.movie.subdir),
             ID=self.trackID,
             type=self.fileType
         )
@@ -188,13 +184,11 @@ class subtitleTrack(object):
 
     """
     def __init__(self, movie):
-        self.sourceFile = movie.sourceFile
+        self.movie = movie
         self.trackID = None
         self.fileType = None
         self.extracted = False
         self.extractedSup = None
-
-        self.targetRes = movie.targetRes
 
         # When converted, there will be an Idx file and a Sub file
         self.converted = False
@@ -213,6 +207,11 @@ class subtitleTrack(object):
 
 class Movie(object):
     """A movie file, with all video, audio and subtitle tracks"""
+    def __init__(self, root, subdir, fname):
+        self.root = root
+        self.subdir = subdir
+        self.fileName = fname
+        self.path = os.path.join(dir, d, f).replace('\\', '/')
 
 #===============================================================================
 # FUNCTIONS
