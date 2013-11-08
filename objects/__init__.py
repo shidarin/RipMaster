@@ -15,6 +15,8 @@
 # PRIVATE FUNCTIONS
 #===============================================================================
 
+def _getDir
+
 def _stripAndRemove(string, remove=None):
     """Strips whitespace and optional chars from both sides of the target string.
 
@@ -152,12 +154,30 @@ class audioTrack(object):
             The source file that the track is being pulled from.
 
     """
-    def __init__(self, file):
-        self.sourceFile = file
-        self.trackID = None
-        self.fileType = None
+    def __init__(self, movie, trackID, fileType):
+        from os import path
+        self.sourceFile = movie.sourceFile
+        self.directory = path.split(movie.sourceFile)[0]
+        self.trackID = trackID
+        self.fileType = fileType
         self.extracted = False
         self.extractedAudio = None
+
+    def setDestination(self):
+        """Sets the destination for the extracted audio track"""
+        self.extractedAudio = "{dir}/Track{ID}_audio.{type}".format(
+            dir=self.directory,
+            ID=self.trackID,
+            type=self.fileType
+        )
+
+    def extractTrack(self):
+        command = str(track)
+        command += ':'
+
+        savedAudio.append(fileDest)
+
+        mkvExtract(file, command, fileDest)
 
 class subtitleTrack(object):
     """A single subtitle track.
@@ -191,6 +211,8 @@ class subtitleTrack(object):
         self.convertedIdxForced = None
         self.convertedSubForced = None
 
+class Movie(object):
+    """A movie file, with all video, audio and subtitle tracks"""
 
 #===============================================================================
 # FUNCTIONS
