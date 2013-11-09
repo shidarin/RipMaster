@@ -169,43 +169,10 @@ strings in the best fashion. I am sorry.
 
 # Standard Imports
 import os
-from ast import literal_eval
 
 # Ripmaster Imports
-from apps import handBrake, mkvExtract, mkvInfo, bdSup2Sub
+from tools import Config, Movie
 
-#===============================================================================
-# VARIABLES
-#==============================================================================
-
-# Valid Instructions
-INSTRUCTIONS = {
-    '1080_uq': 1080,
-    '1080_uq_animation': 1080,
-    '1080_uq_film': 1080,
-    '1080_uq_grain': 1080,
-    '1080_hq': 1080,
-    '1080_hq_animation': 1080,
-    '1080_hq_film': 1080,
-    '1080_hq_grain': 1080,
-    '1080': 1080,
-    '720_hq': 720,
-    '720_hq_animation': 720,
-    '720_hq_film': 720,
-    '720_hq_grain': 720,
-    '720': 720,
-    '480_hq': 480,
-    '480_hq_animation': 480,
-    '480_hq_film': 480,
-    '480_hq_grain': 480,
-    '480_24p': 480,
-    '480_30p': 480,
-    '480_24p_tv': 480,
-    '480_24p_animation': 480,
-    '480_30p_tv': 480,
-    '480_tv': 480,
-    '480': 480
-    }
 #===============================================================================
 # FUNCTIONS
 #===============================================================================
@@ -214,7 +181,7 @@ INSTRUCTIONS = {
 
 def get_movies(dir):
     """Gets the movies from the specified directory"""
-    movielist = []
+    movieList = []
 
     directories = os.listdir(dir)
     for d in directories:
@@ -225,417 +192,50 @@ def get_movies(dir):
         files = os.listdir("{root}/{subdir}".format(root=dir, subdir=d))
         for f in files:
             if '--converted' not in f and '.mkv' in f:
-                fullpath = os.path.join(dir, d, f).replace('\\', '/')
-                movie = objects.Movie(filepath, )
+                movie = Movie(dir, d, f)
+                movieList.append(movie)
 
-def convert_filename(movieFile):
-    """Converts movie filename to: safe filename, directory, and instructions
-
-    Args:
-        movieFile: (str)
-            The MKV movie filename to be converted
-
-    Raises:
-        ValueError
-            If no instruction set is found or not matching the whitelisted
-            instruction sets, ValueError will be raised.
-
-    Returns:
-        string_escape: (str)
-            A properly formatted filepath string
-
-        directory: (str)
-            The directory the file lives in
-
-        instruction: (str)
-            The instruction set for BDSup2Sub and Handbrake
-
-    """
-
-    # Convert from crazy windows formatting.
-    string_escape = movieFile.replace("\\", "/")
-
-    # Creates a list where each entry is a folder
-    directory = string_escape.split("/")
-
-    instruction = directory[-1].split('__')
-
-    try:
-        instruction = instruction[1].replace('.mkv', '')
-    except IndexError: # No '__' present in filename
-        raise ValueError(directory[-1] + ' has no instructions in name')
-
-    if instruction not in INSTRUCTIONS:
-        raise ValueError(instruction + ' is not a valid instruction string')
-
-    # Joins directory listing back up, minus the file
-    directory = "/".join(directory[:-1])
-
-    return string_escape, directory, instruction
-
-# Program Functions
-
-def extract_tracks(file, directory):
-    """extracts tracks per file"""
-
-    videoTracks, audioTracks, subtitleTracks = mkvInfo(file)
-
-    savedSubtitles = [] # Will be list of saved subtitle files
-    savedAudio = []
-
-    # Now to extract each pgs subtitle track, one at a time
-    for track in subtitleTracks:
-        if subtitleTracks[track] == 'pgs':
-            command = str(track)
-            command += ':'
-
-            fileDest = directory + '/Track'
-            fileDest += str(track)
-            fileDest += 'subtitle.sup'
-
-            savedSubtitles.append(fileDest)
-
-            mkvExtract(file, command, fileDest)
-
-    # Now to extract each TrueHD track, one at a time
-    for track in audioTracks:
-        if audioTracks[track] == 'truehd':
-            command = str(track)
-            command += ':'
-
-            fileDest = directory + '/Track'
-            fileDest += str(track)
-            fileDest += 'audio.truehd'
-
-            savedAudio.append(fileDest)
-
-            mkvExtract(file, command, fileDest)
-
-        elif audioTracks[track] == 'acm':
-            # ACM Audio is not supported
-            pass
-
-    return savedSubtitles, savedAudio
-
-def convert_subtitles(file, instruction):
-    """Converts a subtitle file, saving one or more sub conversions"""
-
-    # Converts our handbrake instruction indicator to BD resolution args
-    resolution = INSTRUCTIONS[instruction]
-
-    if resolution == 480:
-        resolution = 'ntsc'
-    else:
-        resolution = str(resolution) + 'p'
-
-    convertedFiles = []
-    forced = False
-    forcedOnly = True
-
-    # Our only option flag is really resolution
-    options = '-r ' + resolution
-
-    destFile = file[:-4] + '.idx'
-    convertedFiles.append(destFile)
-
-    # Using deprecated os.popen (easier) to put shell output in list
-    shellOut = bdSup2Sub(file, options, destFile, popen=True)
-
-    # We need to check the results for FORCED subtitles
-    #
-    # If the amount of Forced subtitles is less than the total subs
-    # We'll just create a new .idx file in addition to the default one.
-    #
-    # If the amount of Forced subtitles is the same as the total subs,
-    # the entire subtitle track is forced, so we remove the resultFiles
-    # and create a new FORCED .idx
-    for line in shellOut:
-
-        totalCount = 0
-
-        if line.startswith('#'):
-            lineList = line.split(' ')
-            # The last count entry from BD will set the total
-            try:
-                totalCount = int(lineList[1])
-            except ValueError:
-                pass
-
-        # There should only be 1 entry with 'forced' in it, that entry looks like:
-        #
-        # 'Detected 39 forced captions.'
-        if 'forced' in line:
-            forcedCaptions = line.replace('Detected ', '')
-            forcedCaptions = int(forcedCaptions.replace(' forced captions.', ''))
-
-            if forcedCaptions > 0:
-                forced = True
-            if forcedCaptions == totalCount:
-                forcedOnly = True
-
-    if forced:
-        # If forced, we'll create a new _FORCED.idx in addition to the one already exported.
-        options += ' -D'
-        forcedFile = destFile[:-4] + '_FORCED.idx'
-        bdSup2Sub(file, options, forcedFile)
-
-        if forcedOnly:
-            # If forcedOnly, we'll remove the first idx and sub filesets, leaving only
-            # the FORCED idx and sub.
-            os.remove(destFile)
-            os.remove(destFile[:-4] + '.sub')
-
-            # We'll also remove the deleted file from the resultFiles list.
-            convertedFiles.remove(destFile)
-
-        convertedFiles.append(forcedFile)
-
-    return convertedFiles
-
-def encode_movie(file, dest, instruction, speed):
-
-    resolution = INSTRUCTIONS[instruction]
-
-    WIDTH = {
-        1080: 1920,
-        720: 1280,
-        480: 720
-        }
-
-    videoTracks, audioTracks, subtitleTracks = mkvInfo(file)
-
-    # Before setting the initial option string, we need to override
-    # the provided speed setting if we're on an Ultra Quality convert.
-    if 'uq' in instruction:
-        speed = 'veryslow'
-
-    #
-    # DESTINATION & VIDEO OPTIONS
-    #
-
-    # File Format, Chapter Markers, Encoder, Encoder Speed
-    options = '-f mkv -m -e x264 --x264-preset ' + speed
-
-    # Encoder Tuning
-    instruction_list = instruction.split('_')
-    if len(instruction_list) > 2:
-        if instruction_list[2] != 'tv':
-            options += ' --x264-tune ' + instruction_list[2]
-
-    # Encoder Quality
-    if 'uq' in instruction_list:
-        quality = ultraQual[resolution]
-    elif 'hq' in instruction_list:
-        quality = highQual[resolution]
-    else:
-        quality = baseQual[resolution]
-
-    options += ' -q ' + str(quality)
-
-    # Encoder Framerate
-    if '24p' in instruction_list:
-        options += ' -r 23.976'
-    elif '30p' in instruction_list:
-        options += ' -r 29.97'
-
-    options += ' --cfr'
-
-    #
-    # AUDIO OPTIONS
-    #
-
-    options += ' -a '
-    for track in audioTracks:
-        if audioTracks[track] != 'truehd':
-            options += str(track) + ','
-    options = options[:-1] # Remove trailing comma
-
-    options += ' -E '
-    for track in audioTracks:
-        if audioTracks[track] != 'truehd':
-            options += 'copy,'
-    options = options[:-1]
-
-    options += ' --audio-fallback ffac3'
-
-    #
-    # PICTURE SETTINGS
-    #
-
-    # Picture Resolution
-    options += ' -w ' + str(WIDTH[resolution]) + ' --loose-anamorphic'
-
-    #
-    # FILTERS
-    #
-
-    if 'tv' in instruction_list:
-        options += ' -d slower'
-
-    #
-    # SUBTITLES
-    #
-
-    vobsub = False
-
-    options += ' -N ' + language
-    for track in subtitleTracks:
-        if subtitleTracks[track] == 'vobsub':
-            vobsub = True
-    if vobsub:
-        options += ' -s scan'
-
-    handBrake(file, options, dest)
+    return movieList
 
 #===============================================================================
 # MAIN
 #===============================================================================	
 
-# XXX file.read() here
-# XXX Set Java, BDSup2Sub and Handbrake vars
-# Detect all new movies, add to newMovies list
-# Remove movies from file listing
-'''
-newMovies = [
-    "I:\Rips\RawBR\The_Expendables_2\The_Expendables_2__720.mkv",
-    "I:\Rips\RawBR\Blood_Diamond\Blood_Diamond__720_hq_film.mkv",
-    "I:\Rips\RawBR\Pacific_Rim\Pacific_Rim__1080_hq_film.mkv",
-    "I:\Rips\RawBR\Saving_Private_Ryan\Saving_Private_Ryan__1080_hq_film.mkv"
-]
-'''
-newMovies = []
+def main():
+    # TODO: Allow users to supply alt configs?
+    config = Config('./Ripmaster.ini')
 
-# If we have results in the ini file, we'll save those to a pickle list
-if newMovies:
-    with open("new_movies.txt", "w") as f:
-        for movie in newMovies:
-            f.write("%s\n" % movie)
-# If no results, we'll pick up where a crash might have left off
-else:
-    with open("new_movies.txt", "r") as f:
-        newMovies = [line.strip() for line in f]
+    root = os.getcwd()
 
-print newMovies
+    # TODO: Implement crash protection again by reading pickled movielist.
+    movies = []
 
-with open("extracted_movies.txt", "r") as f:
-    tempMovies = [line.strip() for line in f]
-    extractedMovies = []
-    for entry in tempMovies:
-        extractedMovies.append(literal_eval(entry))
+    newMovies = get_movies(root)
 
-with open("converted_movies.txt", "r") as f:
-    convertedMovies = [line.strip() for line in f]
+    for movie in movies:
+        for raw in newMovies:
+            if movie.path == raw.path:
+                newMovies.remove(raw)
 
-if newMovies == None:
-    newMovies = []
-if extractedMovies == None:
-    extractedMovies = []
-if convertedMovies == None:
-    convertedMovies = []
+    movies.extend(newMovies)
 
-# Conversion of filepath, extraction of audio and subtitles
-if newMovies:
-    extracted = []
-    for movie in newMovies:
+    # TODO: Save Point
 
-        # File is full filepath
-        # Directory is filepath minus file
-        # Instructions if instruction for dictionary for conversion
-
-        print "Converting filename..."
-        file, directory, instruction = convert_filename(movie)
-
-        # savedSubtitle is list of saved subtitle files
-        # savedAudio is list of saved TrueHD files
-
-        print "Extracting Tracks..."
-        savedSubtitles, savedAudio = extract_tracks(file, directory)
-
-        convertedSubtitles = []
-
-        print "Converting Subtitles..."
-        for subtitle in savedSubtitles:
-            convertedSubtitles.extend(convert_subtitles(subtitle, instruction))
-
-        # Crash Protection
-
-        thisMovie = [
-            file,
-            directory,
-            instruction,
-            convertedSubtitles,
-            savedAudio
-            ]
-
-        extractedMovies.append(thisMovie)
-
-        with open("extracted_movies.txt", "w") as f:
-            for entry in extractedMovies:
-                f.write("%s\n" % entry)
-
-        # If script crashes on a movie after this, new_movies.p will only
-        # contain movies that have not finished extraction.
-        toExtract = []
-
-        for entry in newMovies:
-            toExtract.append(entry)
-
-        extracted.append(movie)
-
-        for entry in extracted:
-            toExtract.remove(entry)
-
-        with open("new_movies.txt", "w") as f:
-            for entry in toExtract:
-                f.write("%s\n" % entry)
-
-    with open("new_movies.txt", "r") as f:
-        newMovies = [line.strip() for line in f]
-
-    if newMovies == None:
-        newMovies = []
-
-# Conversion of movie file
-if extractedMovies:
-    converted = []
-    for movie in extractedMovies:
-        file = movie[0]
-        directory = movie[1]
-        instruction = movie[2]
-        convertedSubtitles = movie[3]
-        savedAudio = movie[4]
-
-        destination = file[:-4] + '--Converted.mkv'
-
-        print "Encoding movie", destination
-        encode_movie(file, destination, instruction, speed)
-
-        convertedMovies.append(destination)
-        with open("converted_movies.txt", "w") as f:
-            for entry in convertedMovies:
-                f.write("%s\n" % entry)
-
-        toConvert = []
-
-        for entry in extractedMovies:
-            toConvert.append(entry)
-
-        converted.append(movie)
-
-        for entry in converted:
-            toConvert.remove(entry)
-
-        with open("extracted_movies.txt", "w") as f:
-            for entry in toConvert:
-                f.write("%s\n" % entry)
-
-    with open("extracted_movies.txt", "r") as f:
-        tempMovies = [line.strip() for line in f]
-        extractedMovies = []
-        for entry in tempMovies:
-            extractedMovies.append(literal_eval(entry))
-
-    if extractedMovies == None:
-        extractedMovies = []
+    for movie in movies:
+        if not movie.extracted:
+            movie.extractTracks()
+            # TODO: Save Point
+    for movie in movies:
+        if not movie.converted:
+            movie.convertTracks()
+            # TODO: Save Point
+    for movie in movies:
+        if not movie.encoded:
+            movie.encodeMovie()
+            # TODO: Save Point
+    for movie in movies:
+        if not movie.merged:
+            # TODO: Add mkvMerge
+            pass
 
 raw_input("Press enter to exit")
