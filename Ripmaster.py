@@ -205,7 +205,7 @@ def main():
     # TODO: Allow users to supply alt configs?
     config = Config('./Ripmaster.ini')
 
-    root = os.getcwd()
+    root = os.getcwd() + '/toConvert/'
 
     # TODO: Implement crash protection again by reading pickled movielist.
     movies = []
@@ -238,4 +238,7 @@ def main():
             # TODO: Add mkvMerge
             pass
 
-raw_input("Press enter to exit")
+if __name__ == "__main__":
+    main()
+
+raw_input('Press enter to close')

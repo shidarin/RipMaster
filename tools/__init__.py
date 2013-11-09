@@ -7,10 +7,12 @@
 # IMPORTS
 #===============================================================================
 
+# Standard Imports
+import os
+
 #===============================================================================
 # GLOBALS
 #===============================================================================
-import os
 
 RESOLUTIONS = [1080, 720, 480]
 RESOLUTION_WIDTH = {1080: 1920, 720: 1280, 480: 720}
@@ -154,6 +156,14 @@ class Config(object):
                 elif line.startswith('Language'):
                     Config.language = _stripAndRemove(line, 'Language =')
 
+    def debug(self):
+        print Config.java
+        print Config.sup2Sub
+        print Config.handBrake
+        print Config.x264Speed
+        print Config.language
+        print Config.quality
+
 class AudioTrack(object):
     """A single audio track.
 
@@ -178,8 +188,8 @@ class AudioTrack(object):
         )
 
         self.extractedAudio = os.path.join(
-            movie.dir,
-            movie.subdir,
+            self.movie.root,
+            self.movie.subdir,
             fileName
         ).replace('\\', '/')
 
@@ -224,8 +234,8 @@ class SubtitleTrack(object):
         fileName += "_Track{trackID}_sub.sup".format(trackID=self.trackID)
 
         self.extractedSup = os.path.join(
-            movie.dir,
-            movie.subdir,
+            self.movie.root,
+            self.movie.subdir,
             fileName
         ).replace('\\', '/')
 
@@ -352,7 +362,7 @@ class Movie(object):
     def _getInstructions(self):
         """Parses the directory name to grab all the given instructions"""
         try:
-            instructionSet = self.subdir.split('_')[1]
+            instructionSet = self.subdir.split('__')[-1].split('_')
         except IndexError: # No '__' present in filename
             instructionSet = []
 
