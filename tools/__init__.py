@@ -479,7 +479,7 @@ class Movie(object):
 
         # TODO: We should derive our default res based on the video track
         self.resolution = 1080
-        self.quality = Config.quality['bq']['1080']
+        self.quality = None
         self.preset = None
         self.tv = False
         self.fps = None
@@ -540,9 +540,6 @@ class Movie(object):
     def extractTracks(self):
         """Extracts relevant tracks"""
 
-        # TODO: We should be checking each track's extracted status before
-        # issuing an extractTrack() call on the track's method.
-
         for track in self.videoTracks:
             # TODO: Multiple video track support
             pass
@@ -564,9 +561,6 @@ class Movie(object):
 
         # TODO: Is there an audio codec that handbrake AND mkvMerge can't
         # read?
-
-        # TODO: We should be checking each track's extracted status before
-        # issuing a convertTrack() call on the track's method.
 
         for track in self.subtitleTracks:
             if not track.converted:
