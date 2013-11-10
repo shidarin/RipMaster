@@ -206,7 +206,7 @@ def main():
     config = Config('./Ripmaster.ini')
     config.debug()
 
-    root = os.getcwd() + '/toConvert_tests/'
+    root = os.getcwd() + '/toConvert/'
 
     # TODO: Implement crash protection again by reading pickled movielist.
     movies = []
