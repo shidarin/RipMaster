@@ -93,8 +93,9 @@ class Config(object):
     java = ''
     sup2Sub = ''
     handBrake = ''
-    x264Speed = ''
-    language = ''
+    x264Speed = 'slow'
+    language = 'English'
+    audioFallback = 'ffac3'
 
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
@@ -125,6 +126,10 @@ class Config(object):
                 elif line.startswith('x264 Speed'):
                     Config.x264Speed = _stripAndRemove(
                         line, 'x264 Speed ='
+                    )
+                elif line.startswith('Audio Fallback ='):
+                    Config.audioFallback = _stripAndRemove(
+                        line, 'Audio Fallback ='
                     )
                 elif line.startswith('Baseline Quality'):
                     Config.quality['bq']['1080'] = int(_stripAndRemove(
@@ -165,6 +170,7 @@ class Config(object):
         print "Handbrake at:", Config.handBrake
         print "x624speed set to:", Config.x264Speed
         print "Default language:", Config.language
+        print "Audio Codec Fallback:", Config.audioFallback
         print "Quality dictionary:"
         for entry in Config.quality:
             print entry + ":", Config.quality[entry]
@@ -513,9 +519,10 @@ class Movie(object):
             if track != passthroughAudio[-1]:
                 options += ','
 
-        # TODO: Fallback audio should be a config preference
         if passthroughAudio:
-            options += ' --audio-fallback ffac3'
+            options += ' --audio-fallback {codec}'.format(
+                codec=Config.audioFallback
+            )
 
         #
         # PICTURE SETTINGS
