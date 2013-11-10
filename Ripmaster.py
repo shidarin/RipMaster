@@ -169,6 +169,8 @@ strings in the best fashion. I am sorry.
 
 # Standard Imports
 import os
+import pickle
+from shutil import copyfile
 
 # Ripmaster Imports
 from tools import Config, Movie
@@ -208,15 +210,29 @@ def main():
 
     root = os.getcwd() + '/toConvert_tests/'
 
-    # TODO: Implement crash protection again by reading pickled movielist.
-    movies = []
+    # See if we have a backup copy. Our backup copy is more likely to be
+    # complete than the master. See issue #23 on github
+    # http://github.com/shidarin/RipMaster/issues/23
+    try:
+        copyfile("./movies.p.bak", "./movies.p")
+    except IOError:
+        pass
+
+    # TODO: We should really try the main file first before copying over the
+    # backup.
+
+    try:
+        with open("./movies.p", "rb") as f:
+            movies = pickle.load(f)
+    except (IOError, EOFError):
+        print "No existing movie in process found. Starting from scratch"
+        movies = []
 
     print ""
     print "Found the following movies in progress:"
     for entry in movies:
         print entry.path
     print ""
-    print "Adding the following new movies:"
 
     newMovies = get_movies(root)
 
@@ -224,27 +240,38 @@ def main():
         for raw in newMovies:
             if movie.path == raw.path:
                 newMovies.remove(raw)
-            else:
-                print raw.path
 
     print ""
 
     movies.extend(newMovies)
 
-    # TODO: Save Point
+    print "Total movie list after adding new movies:"
+    for entry in movies:
+        print entry.path
+
+    with open("./movies.p", "wb") as f:
+        pickle.dump(movies, f)
+    # Create a copy immediately after a successful dump
+    copyfile("./movies.p", "./movies.p.bak")
 
     for movie in movies:
         if not movie.extracted:
             movie.extractTracks()
-            # TODO: Save Point
+            with open("./movies.p", "wb") as f:
+                pickle.dump(movies, f)
+        copyfile("./movies.p", "./movies.p.bak")
     for movie in movies:
         if not movie.converted:
             movie.convertTracks()
-            # TODO: Save Point
+            with open("./movies.p", "wb") as f:
+                pickle.dump(movies, f)
+        copyfile("./movies.p", "./movies.p.bak")
     for movie in movies:
         if not movie.encoded:
             movie.encodeMovie()
-            # TODO: Save Point
+            with open("./movies.p", "wb") as f:
+                pickle.dump(movies, f)
+        copyfile("./movies.p", "./movies.p.bak")
     for movie in movies:
         if not movie.merged:
             # TODO: Add mkvMerge

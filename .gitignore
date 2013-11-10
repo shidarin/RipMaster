@@ -1,8 +1,4 @@
 # Local crap
-EmptyLists.py
-converted_movies.txt
-extracted_movies.txt
-new_movies.txt
 
 # We do not want to upload binary files
 *.mkv
@@ -10,6 +6,11 @@ new_movies.txt
 *.sup
 *.sub
 *.truehd
+
+# Do not upload in progress pickle lists
+*.p
+*.pickle
+*.p.bak
 
 #################
 ## Eclipse
