@@ -208,7 +208,7 @@ def main():
     config = Config('./Ripmaster.ini')
     config.debug()
 
-    root = os.getcwd() + '/toConvert_tests/'
+    root = os.getcwd() + '/toConvert/'
 
     # See if we have a backup copy. Our backup copy is more likely to be
     # complete than the master. See issue #23 on github
