@@ -55,12 +55,15 @@ Initial Setup
 
 The following programs are required for Ripmaster to run:
 
-Python (2.6-2.7: http://www.python.org/)
-Java (http://java.com/en/download/index.jsp)
-MKVToolNix (http://www.bunkus.org/videotools/mkvtoolnix/)
-    MKVToolNix contains MKVMerge, MKVInfo and MKVExtract
-BDSup2Sub (v5+ by mjuhasz: https://github.com/mjuhasz/BDSup2Sub/wiki)
-Handbrake with CLI (I recommend v9.6 at this time http://handbrake.fr/)
+
+    Python (2.6-2.7: http://www.python.org/)
+    Java (http://java.com/en/download/index.jsp)
+    MKVToolNix (http://www.bunkus.org/videotools/mkvtoolnix/)
+        MKVToolNix contains MKVMerge, MKVInfo and MKVExtract
+    BDSup2Sub (v5+ by mjuhasz: https://github.com/mjuhasz/BDSup2Sub/wiki)
+    Handbrake with CLI (I recommend v9.6 at this time http://handbrake.fr/)
+
+
 
 While you can rip to an MKV file using whatever you wish, MakeMKV is probably
 the best option: http://www.makemkv.com/
@@ -76,18 +79,20 @@ Default: slow
 If you desire a fallback audio other than AC3, you should set that here too.
 Options for fallback audio are:
 
-faac
-ffaac
-ffac3
-lame
-vorbis
-ffflac
+
+    faac
+    ffaac
+    ffac3
+    lame
+    vorbis
+    ffflac
+
 
 But note that not all of these support full surround sound.
 Default: ffac3
 
 Sample Ripmaster.ini file:
-
+```
 ================================================================================
 
 Java = C:/Program Files (x86)/Java/jre7/bin/java
@@ -112,7 +117,7 @@ Language = English
 Audio Fallback = ffac3
 
 ================================================================================
-
+```
 Leading and trailing whitespaces are automatically removed, but all entries
 are case sensitive. Make sure there's still a space between the argument
 and the '=' sign.
@@ -126,7 +131,7 @@ Encoding Instructions
 
 A sample folder name might be:
 
-Akira__1080_hq_animation
+    Akira__1080_hq_animation
 
 Anything before the double underscore ('__') is considered the title of the
 movie. Anything after is part of the instruction set.
@@ -135,7 +140,7 @@ RESOLUTION:
 
 You at least need a resolution, accepted arguments for this are:
 
-1080, 720, 480
+    1080, 720, 480
 
 If you don't provide a target resolution, it defaults to 1080 (although in the
 future it will try and pass through the incoming resolution).
@@ -144,7 +149,7 @@ QUALITY:
 
 Optionally, you can provide a quality preset:
 
-uq, hq, bq
+    uq, hq, bq
 
 This preset will be cross referenced with the resolution to get the 'rf' quality
 setting Handbrake will use for the video encode.
@@ -155,7 +160,14 @@ X264 TUNING:
 
 Selects the x264 tuning preset to be used. Options are:
 
-film animation grain stillimage psnr ssim fastdecode zerolatency
+    film
+    animation
+    grain
+    stillimage
+    psnr
+    ssim
+    fastdecode
+    zerolatency
 
 But it's recommended to only stick to 'film', 'animation', or 'grain'.
 
@@ -163,13 +175,13 @@ SET FPS:
 
 Some material needs to be 'forced' to a certain fps, especially DVD material:
 
-30p, 25p, 24p
+    30p, 25p, 24p
 
 DE-INTERLACING:
 
 If your file needs to be de-interlaced, give the instruction set:
 
-tv
+    tv
 
 And it will do a high quality de-interlacing pass.
 
@@ -194,8 +206,8 @@ Starting Fresh:
 If you mess something up, or you want to start an entire encode batch over again
 (say you changed the ini settings), simply delete the following from the folder:
 
-movies.p
-movies.p.bak
+    movies.p
+    movies.p.bak
 
 Once those are deleted, every movie ripmaster finds will be treated as a new
 movie to be converted.
