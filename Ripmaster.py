@@ -8,13 +8,22 @@
 Description
 -----------
 
-The purpose of Ripmaster is to string together several processes that, done
-through GUIs, are time consuming and error prone.
+Ripmaster's main goal is to take an extracted mkv from makeMkv, and take it
+through all the intermediate steps needed to produce a high quality result mkv,
+including audio tracks that handbrake can't pass through, and bluray subtitles
+that handbrake can't convert.
+
+Process
+-------
 
 It's assumed the user rips all the audio tracks, subtitles and movies themselves
-into an MKV format, probably using MakeMKV.
+into an MKV format, probably using MakeMKV. If the user doesn't want to rip
+their own movies, there are other projects out there that will JUST do the
+automated ripping. However, in my experience this process requires so much hand
+holding (having to pick the right track, etc.) that it's better just to do it
+manually.
 
-After that, Ripmaster extracts subtitles and TrueHD audio tracks from the MKV
+After that, Ripmaster extracts subtitles and supported audio tracks from the MKV
 (since Handbrake cannot handle those directly).
 
 Ripmaster uses BDSupToSub to convert the subtitle sup files into a matching IDX
@@ -24,23 +33,18 @@ subtitles, either in part or through the entire track, it creates an additional
 subtitles, the 'normal' IDX and SUB pair are not created from that track,
 leaving only the 'forced' result.
 
-Handbrake then converts the video track, compressing it according to presets,
-and auto-passing through all audio tracks (except TrueHD, which it cannot
-handle). 
+Handbrake then converts the video track, compressing it according to user
+specified criteria, and auto-passing through all audio tracks (except audio
+tracks (like trueHD), which it cannot handle).
 
-Finally, mkvmerge takes all resulting files (the IDX-SUB subtitles, the TrueHD
-audio (if present) and the converted video), and merges them together, setting
-flags on 'forced' tracks correctly, and setting TrueHD as the default audio
-track if it's present.
+Finally, mkvmerge takes all resulting files (the IDX-SUB subtitles, the
+extracted audio (if present) and the converted video), and merges them together,
+setting flags on 'forced' tracks correctly, and setting extracted audio as the
+default audio track if it's present (since these tracks are usually the highest
+quality).
 
 If at any point in the process the computer crashes (normally during the
-Handbrake encoding), Ripmaster starts from the point last left off. It does this
-by pickle-saving lists at various points during the process, removing movies one
-by one as they complete the step in the chain.
-
-When Ripmaster recovers, it actually goes through the steps backwards- first it
-checks if there are finals to merge with mkvmerge, then if there are movies to
-encode with handbrake, finally if there are subtitles and audio to rip.
+Handbrake encoding), Ripmaster starts from the last completed task.
 
 Initial Setup
 -------------
@@ -59,10 +63,24 @@ the best option: http://www.makemkv.com/
 
 User's need to edit Ripmaster.ini and enter the paths to BDSupToSub, Java and
 HandBrakeCLI. Users need to convert windows \s into /s for these install
-locations, but that is not required for the movie files.
+locations.
 
 Users should also set their desired x264 speed, available options are:
 ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+Default: slow
+
+If you desire a fallback audio other than AC3, you should set that here too.
+Options for fallback audio are:
+
+faac
+ffaac
+ffac3
+lame
+vorbis
+ffflac
+
+But note that not all of these support full surround sound.
+Default: ffac3
 
 Sample Ripmaster.ini file:
 
@@ -82,11 +100,12 @@ High Quality
     720p = 19
     480p = 19
 Ultra Quality
-    1080p = 10
-    720p = 10
-    480p = 10
+    1080p = 16
+    720p = 16
+    480p = 16
 
 Language = English
+Audio Fallback = ffac3
 
 ================================================================================
 
@@ -95,71 +114,87 @@ are case sensitive. Make sure there's still a space between the argument
 and the '=' sign.
 
 Users need to Rip their own movies from disk, preferably using MakeMKV, then
-they need to decide on how they want each movie processed, editing the .mkv
-file according to the instructions below (See Encoding Instructions).
-
-Then, they simply need to add the filepath to a newline in between the <MOVIES>
-and </MOVIES> tags.
-
-Ripmaster will automatically remove the movie files once the first step- the
-extraction of TrueHD audio with extraction and conversion of subtitles- is
-completed.
+they need to decide on how they want each movie processed, this is done by
+changing the folder name that contains a single or multiple mkv files.
 
 Encoding Instructions
 ---------------------
 
-In the above example, you can see the mkv file has an additional suffix attached
-to the end of the filename, seperated by a '__' (double underscore). That string
-will be used by both BDSupToSub and Handbrake to choose the proper resolution
-and encoding and MUST be present or Ripmaster won't know what to do with the
-file, Ripmaster does NOT have any default, you must be explicit.
+A sample folder name might be:
 
-Currently Ripmaster supports the following instruction strings:
+Akira__1080_hq_animation
 
-    What you want										What you type
-    -------------										-------------
+Anything before the double underscore ('__') is considered the title of the
+movie. Anything after is part of the instruction set.
 
-    1080p:
-         (Ultra Quality- NOT efficient)
-        Ultra Quality									__1080_uq
-        Ultra Quality Animation							__1080_uq_animation
-        Ultra Quality Film								__1080_uq_film
-        Ultra Quality Grain								__1080_uq_grain
-         (High Quality- A good pick for 1080)
-        High Quality									__1080_hq
-        High Quality Animation							__1080_hq_animation
-        High Quality Film								__1080_hq_film
-        High Quality Grain								__1080_hq_grain
-         (Low Quality- suggest to go down to 720)
-        Low Quality										__1080
-    720p:
-        High Quality									__720_hq
-        High Quality Animation							__720_hq_animation
-        High Quality Film								__720_hq_film
-        High Quality Grain								__720_hq_grain
-        Low Quality										__720
-    480p (from HD):
-        High Quality									__480_hq
-        High Quality Animation							__480_hq_animation
-        High Quality Film								__480_hq_film
-        High Quality Grain								__480_hq_grain
-         (from DVD)
-        Average 24p (Force 23.976 constant frame rate)	__480_24p
-        Average 60p (Force 29.97 constant frame rate)	__480_30p
-        Average 24p De-interlace						__480_24p_tv
-        Average 60p De-interlace						__480_30p_tv
-        Average De-interlace							__480_tv
-        Average											__480
+RESOLUTION:
 
-Again, these instructions are NOT OPTIONAL and must be present at the end of the
-file string.
+You at least need a resolution, accepted arguments for this are:
 
-Other Notes
------------
+1080, 720, 480
 
-You might notice certain block comments go longer than 80 characters due to
-indentation. This was the cleanest method of still presenting those example
-strings in the best fashion. I am sorry.
+If you don't provide a target resolution, it defaults to 1080 (although in the
+future it will try and pass through the incoming resolution).
+
+QUALITY:
+
+Optionally, you can provide a quality preset:
+
+uq, hq, bq
+
+This preset will be cross referenced with the resolution to get the 'rf' quality
+setting Handbrake will use for the video encode.
+
+If you don't provide a quality, it defaults to 'bq' for the resolution.
+
+X264 TUNING:
+
+Selects the x264 tuning preset to be used. Options are:
+
+film animation grain stillimage psnr ssim fastdecode zerolatency
+
+But it's recommended to only stick to 'film', 'animation', or 'grain'.
+
+SET FPS:
+
+Some material needs to be 'forced' to a certain fps, especially DVD material:
+
+30p, 25p, 24p
+
+DE-INTERLACING:
+
+If your file needs to be de-interlaced, give the instruction set:
+
+tv
+
+And it will do a high quality de-interlacing pass.
+
+How To:
+-------
+
+Save your mkv to a folder with the title of the movie and the encoding
+instructions (see above). Place that folder in ripmaster's 'toConvert' folder,
+which is where Ripmaster will search for movies to encode.
+
+Double click on Ripmaster.py to begin the process.
+
+If you want Ripmaster to automatically start up after a crash, place a shortcut
+to Ripmaster.py in your startup folder, but be warned that EVERY time you start
+your computer, Ripmaster will start with it. Just close the window if you don't
+want Ripmaster doing things right now, the crash protection will pickup where
+you left off.
+
+Starting Fresh:
+---------------
+
+If you mess something up, or you want to start an entire encode batch over again
+(say you changed the ini settings), simply delete the following from the folder:
+
+movies.p
+movies.p.bak
+
+Once those are deleted, every movie ripmaster finds will be treated as a new
+movie to be converted.
 
 """
 
@@ -191,6 +226,7 @@ def get_movies(dir):
             continue
         files = os.listdir("{root}/{subdir}".format(root=dir, subdir=d))
         for f in files:
+            # Don't add .mkv's that are handbrake encodes.
             if '--converted' not in f and '.mkv' in f:
                 movie = Movie(dir, d, f)
                 movieList.append(movie)
@@ -202,6 +238,7 @@ def get_movies(dir):
 #===============================================================================	
 
 def main():
+    """Main app process. This controls every step of the process"""
     # TODO: Allow users to supply alt configs?
     config = Config('./Ripmaster.ini')
     config.debug()
@@ -222,6 +259,8 @@ def main():
 
     for movie in movies:
         for raw in newMovies:
+            # If a movie that get_movies() found already matches a movie in our
+            # pickled list, we should remove it, otherwise we'll add it twice.
             if movie.path == raw.path:
                 newMovies.remove(raw)
             else:
@@ -229,6 +268,8 @@ def main():
 
     print ""
 
+    # Now that we've removed duplicates, we'll extend the main list of movie
+    # objects by the new movies found.
     movies.extend(newMovies)
 
     # TODO: Save Point
@@ -250,7 +291,14 @@ def main():
             # TODO: Add mkvMerge
             pass
 
+    print ""
+    print "The following movies have been completed:"
+    for movie in movies:
+        print movie.path
+    print ""
+
 if __name__ == "__main__":
     main()
 
+# Keep the shell up to show results
 raw_input('Press enter to close')

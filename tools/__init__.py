@@ -3,6 +3,58 @@
 # Module containing tools used by Ripmaster
 # By Sean Wallitsch, 2013/11/05
 
+"""
+
+Description
+-----------
+
+This module contains all the classes that Ripmaster uses to represent the files
+and processes on disk.
+
+Classes
+-------
+
+Config
+    The Config object reads the Ripmaster.ini file for all the user set
+    configuration options.
+
+AudioTrack
+    Represents a single audio track within a <Movie>. Each AudioTrack in the mkv
+    gets an AudioTrack object, not just ones Handbrake can't handle.
+
+SubtitleTrack
+    Represents a single subtitle track within a <Movie>. Each subtitle track in
+    the mkv gets a SubtitleTrack object, not just the ones Handbrake can't
+    handle. Since one subtitle track can contain both forced and non-forced
+    subtitles, it's possible that a single subtitle track gets split into
+    two subtitle tracks- one forced and the other containing every subtitle
+    (both forced and not forced).
+
+Movie
+    Represents a single mkv file, contains <AudioTrack>s and <SubtitleTracks>s.
+    Calls all the extraction and conversion methods of it's children.
+
+Functions
+---------
+
+handbrake()
+    CLI command builder for converting video and audio with Handbrake. For all
+    intents and purposes, this is the Handbrake application.
+
+mkvExtract()
+    CLI command builder for extracting tracks with mkvextract. For all intents
+    and purposes, this is the mkvextract application.
+
+mkvInfo()
+    Uses mkvmerge to fetch names, filetypes and trackIDs for all audio, video
+    and subtitle tracks from a given mkv.
+
+bdSup2Sub()
+    CLI command builder for converting subtitle tracks with BDSup2Sub. For all
+    intents and purposes, this is the BDSup2Sub application.
+
+"""
+
 #===============================================================================
 # IMPORTS
 #===============================================================================
@@ -17,7 +69,15 @@ import os
 RESOLUTIONS = [1080, 720, 480]
 RESOLUTION_WIDTH = {1080: 1920, 720: 1280, 480: 720}
 QUALITY = ['uq', 'hq', 'bq']
-H264_PRESETS = ['animation', 'film', 'grain', 'PSNR', 'SSIM', 'Fast Decode']
+H264_PRESETS = [
+    'animation',
+    'film',
+    'grain',
+    'psnr',
+    'ssim',
+    'fastdecode',
+    'zerolatency'
+]
 FPS_PRESETS = ['30p', '25p', '24p']
 EXTRACTABLE_AUDIO = ['truehd']
 EXTRACTABLE_SUBTITLE = ['pgs']
@@ -78,11 +138,12 @@ class Config(object):
         720p = 19
         480p = 19
     Ultra Quality
-        1080p = 10
-        720p = 10
-        480p = 10
+        1080p = 16
+        720p = 16
+        480p = 16
 
     Language = English
+    Audio Fallback = ffac3
 
     Leading and trailing whitespaces are automatically removed, but all entries
     are case sensitive. Make sure there's still a space between the argument
@@ -103,13 +164,16 @@ class Config(object):
         self.getSettings(iniFile)
 
     def getSettings(self, iniFile):
-
+        """Opens the ini file, splits the lines into a list, and grabs input"""
         print "Reading config from:", iniFile
         print ""
 
         with open(iniFile, "r") as f:
+            # splitlines() will give us a list of each line.
             lines = f.read().splitlines()
+
             for i in range(len(lines)):
+                # Remove leading whitespace before comparing with startswith()
                 line = lines[i].lstrip()
                 if line.startswith('Java'):
                     Config.java = _stripAndRemove(
@@ -165,6 +229,7 @@ class Config(object):
                     Config.language = _stripAndRemove(line, 'Language =')
 
     def debug(self):
+        """Prints the current configuration"""
         print "Java at:", Config.java
         print "BDSup2Sub at:", Config.sup2Sub
         print "Handbrake at:", Config.handBrake
@@ -179,8 +244,14 @@ class AudioTrack(object):
     """A single audio track.
 
     Args:
-        file : (str)
-            The source file that the track is being pulled from.
+        movie : (<Movie>)
+            The parent <Movie> object that this <AudioTrack> is a child of.
+
+        trackID : (str)
+            The trackID of the audio track this object is to represent.
+
+        fileType : (str)
+            The filetype of this audiotrack.
 
     """
     def __init__(self, movie, trackID, fileType):
@@ -191,7 +262,10 @@ class AudioTrack(object):
         self.extractedAudio = None
 
     def extractTrack(self):
+        """Extracts the audiotrack this object represents from the parent mkv"""
         command = "{trackID}:".format(trackID=self.trackID)
+
+        # Derive the location to save the track to
         fileName = self.movie.fileName.replace('.mkv', '')
         fileName += "_Track{TrackID}_audio.{ext}".format(
             TrackID=self.trackID,
@@ -220,8 +294,14 @@ class SubtitleTrack(object):
     """A single subtitle track.
 
     Args:
-        movie : (<tools.Movie>)
-            The movie object that contains the original subtitle.
+        movie : (<Movie>)
+            The parent <Movie> object that this <SubtitleTrack> is a child of.
+
+        trackID : (str)
+            The trackID of the subtitle track this object is to represent.
+
+        fileType : (str)
+            The filetype of this subtitle track.
 
     """
     def __init__(self, movie, trackID, fileType):
@@ -247,7 +327,10 @@ class SubtitleTrack(object):
         self.convertedSubForced = None
 
     def extractTrack(self):
+        """Extracts the subtitle this object represents from the parent mkv"""
         command = "{trackID}:".format(trackID=str(self.trackID))
+
+        # Derive the location the track should be saved to
         fileName = self.movie.fileName.replace('.mkv', '')
         # TODO: Should this be locked into .sup?
         fileName += "_Track{trackID}_sub.sup".format(trackID=self.trackID)
@@ -271,6 +354,7 @@ class SubtitleTrack(object):
         self.extracted = True
 
     def convertTrack(self):
+        """Converts and resizes the subtitle track"""
 
         print ""
         print "Converting track {ID} at res: {res}p".format(
@@ -278,9 +362,11 @@ class SubtitleTrack(object):
             res=str(self.movie.resolution)
         )
 
+        # BDSup2Sub doesn't take numerical values for resolution
         if self.movie.resolution == 480:
             res = 'ntsc'
         else:
+            # Should be '1080p' or '720p'
             res = "{res}p".format(res=str(self.movie.resolution))
 
         # Our only option flag is really resolution
@@ -363,7 +449,21 @@ class SubtitleTrack(object):
         self.converted = True
 
 class Movie(object):
-    """A movie file, with all video, audio and subtitle tracks"""
+    """A movie file, with all video, audio and subtitle tracks
+
+    Args:
+        root : (str)
+            The root folder that contains all the movie folders
+
+        subdir : (str)
+            The folder that contains this mkv directly. Instruction set should
+            be in the folder name. Should be something like:
+                Akira__1080_hq_animation
+
+        fname : (str)
+            The filename itself
+
+    """
     def __init__(self, root, subdir, fname):
         self.root = root
         self.subdir = subdir
@@ -426,6 +526,8 @@ class Movie(object):
                 self.fps = int(fps.replace('p', ''))
         if 'tv' in instructionSet:
             self.tv = True
+        if not self.quality:
+            self.quality = Config.quality['bq'][str(self.resolution)]
 
     def _getTracks(self):
         """Runs mkvInfo on the file to grab all the tracks, creating them"""
@@ -437,6 +539,9 @@ class Movie(object):
 
     def extractTracks(self):
         """Extracts relevant tracks"""
+
+        # TODO: We should be checking each track's extracted status before
+        # issuing an extractTrack() call on the track's method.
 
         for track in self.videoTracks:
             # TODO: Multiple video track support
@@ -457,6 +562,9 @@ class Movie(object):
 
         # TODO: Is there an audio codec that handbrake AND mkvMerge can't
         # read?
+
+        # TODO: We should be checking each track's extracted status before
+        # issuing a convertTrack() call on the track's method.
 
         for track in self.subtitleTracks:
             track.convertTrack()
@@ -613,7 +721,6 @@ def mkvExtract(file, command, dest):
 
     """
     os.system('"mkvextract tracks ' + file + ' ' + command + dest + ' "')
-
 
 def mkvInfo(movie):
     """Uses CLI to fetch names all audio, video and subtitle tracks from a mkv
