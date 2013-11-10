@@ -283,7 +283,7 @@ class SubtitleTrack(object):
         # Use the extractedSup as a baseline, replace the file extension
         # We check for and replace the period to make sure we grab the ext
         self.convertedIdx = self.extractedSup.replace('.sup', '.idx')
-        self.convertedSub = self.extractedSup.replace('.sup', '.idx')
+        self.convertedSub = self.extractedSup.replace('.sup', '.sub')
 
         print "Saving IDX file to {dest}".format(dest=self.convertedIdx)
 
