@@ -103,6 +103,9 @@ class Config(object):
 
     def getSettings(self, iniFile):
 
+        print "Reading config from:", iniFile
+        print ""
+
         with open(iniFile, "r") as f:
             lines = f.read().splitlines()
             for i in range(len(lines)):
@@ -157,12 +160,14 @@ class Config(object):
                     Config.language = _stripAndRemove(line, 'Language =')
 
     def debug(self):
-        print Config.java
-        print Config.sup2Sub
-        print Config.handBrake
-        print Config.x264Speed
-        print Config.language
-        print Config.quality
+        print "Java at:", Config.java
+        print "BDSup2Sub at:", Config.sup2Sub
+        print "Handbrake at:", Config.handBrake
+        print "x624speed set to:", Config.x264Speed
+        print "Default language:", Config.language
+        print "Quality dictionary:"
+        for entry in Config.quality:
+            print entry + ":", Config.quality[entry]
 
 class AudioTrack(object):
     """A single audio track.
@@ -192,6 +197,14 @@ class AudioTrack(object):
             self.movie.subdir,
             fileName
         ).replace('\\', '/')
+
+        print ""
+        print "Extracting trackID {ID} of type {type} from {file}".format(
+            ID=self.trackID,
+            type=self.fileType,
+            file=self.movie.path
+        )
+        print ""
 
         mkvExtract(self.movie.path, command, self.extractedAudio)
 
@@ -239,16 +252,30 @@ class SubtitleTrack(object):
             fileName
         ).replace('\\', '/')
 
+        print ""
+        print "Extracting trackID {ID} of type {type} from {file}".format(
+            ID=self.trackID,
+            type=self.fileType,
+            file=self.movie.path
+        )
+        print ""
+
         mkvExtract(self.movie.path, command, self.extractedSup)
 
         self.extracted = True
 
     def convertTrack(self):
 
-        if movie.resolution == 480:
+        print ""
+        print "Converting track {ID} at res: {res}p".format(
+            ID=self.trackID,
+            res=str(self.movie.resolution)
+        )
+
+        if self.movie.resolution == 480:
             res = 'ntsc'
         else:
-            res = "{res}p".format(res=str(movie.resolution))
+            res = "{res}p".format(res=str(self.movie.resolution))
 
         # Our only option flag is really resolution
         options = "-r {res}".format(res=res)
@@ -258,8 +285,10 @@ class SubtitleTrack(object):
         self.convertedIdx = self.extractedSup.replace('.sup', '.idx')
         self.convertedSub = self.extractedSup.replace('.sup', '.idx')
 
+        print "Saving IDX file to {dest}".format(dest=self.convertedIdx)
+
         # Using deprecated os.popen (easier) to put shell output in list
-        shellOut = bdSup2Sub(movie.path, options, self.convertedIdx, popen=True)
+        shellOut = bdSup2Sub(self.extractedSup, options, self.convertedIdx, popen=True)
 
         # We need to check the results for FORCED subtitles
         #
@@ -269,9 +298,12 @@ class SubtitleTrack(object):
         # If the amount of Forced subtitles is the same as the total subs,
         # the entire subtitle track is forced, so we remove the resultFiles
         # and create a new FORCED .idx
+
+        totalCount = 0
+
         for line in shellOut:
 
-            totalCount = 0
+            print line
 
             if line.startswith('#'):
                 lineList = line.split(' ')
@@ -286,35 +318,41 @@ class SubtitleTrack(object):
             #
             # 'Detected 39 forced captions.'
             if 'forced' in line:
-                forcedCaptions = line.split()[1]
+                forcedCaptions = int(line.split()[1])
 
                 if forcedCaptions > 0:
                     self.forced = True
                 if forcedCaptions == totalCount:
                     self.forcedOnly = True
 
-                self.convertedIdxForced = self.convertedIdx.replace(
-                    '.idx',
-                    '_forced.idx'
-                )
-                self.convertedSubForced = self.convertedSub.replace(
-                    '.sub',
-                    '_forced.sub'
-                )
+        print ""
+        print "Subtitle track has forced titles?", self.forced
+        print "Subtitle track is ONLY forced titles?", self.forcedOnly
+        print ""
 
-            if self.forced and not self.forcedOnly:
-                # If some forced subtitles exist (but not the entire subtitle
-                # track is forced), we'll create a new _FORCED.idx in addition
-                # to the one already exported.
-                options += ' -D'
+        if self.forced:
+            self.convertedIdxForced = self.convertedIdx.replace(
+                '.idx',
+                '_forced.idx'
+            )
+            self.convertedSubForced = self.convertedSub.replace(
+                '.sub',
+                '_forced.sub'
+            )
 
-                bdSup2Sub(movie.path, options, self.convertedIdxForced)
+        if self.forced and not self.forcedOnly:
+            # If some forced subtitles exist (but not the entire subtitle
+            # track is forced), we'll create a new _FORCED.idx in addition
+            # to the one already exported.
+            options += ' -D'
 
-            elif self.forced and self.forcedOnly:
-                # If the track is entirely forced subtitles, we'll rename the
-                # extracted file to be the _forced file.
-                os.rename(self.convertedIdx, self.convertedIdxForced)
-                os.rename(self.convertedSub, self.convertedSubForced)
+            bdSup2Sub(self.extractedSup, options, self.convertedIdxForced)
+
+        elif self.forced and self.forcedOnly:
+            # If the track is entirely forced subtitles, we'll rename the
+            # extracted file to be the _forced file.
+            os.rename(self.convertedIdx, self.convertedIdxForced)
+            os.rename(self.convertedSub, self.convertedSubForced)
 
         self.converted = True
 
@@ -455,14 +493,14 @@ class Movie(object):
         # AUDIO OPTIONS
         #
 
-        # TODO: Is there demand for an audioless convert?
-        options += ' -a '
-
         passthroughAudio = []
 
         for track in self.audioTracks:
             if track.fileType not in EXTRACTABLE_AUDIO:
                 passthroughAudio.append(track)
+
+        if passthroughAudio:
+            options += ' -a '
 
         for track in passthroughAudio:
             options += str(track.trackID)
@@ -476,7 +514,8 @@ class Movie(object):
                 options += ','
 
         # TODO: Fallback audio should be a config preference
-        options += ' --audio-fallback ffac3'
+        if passthroughAudio:
+            options += ' --audio-fallback ffac3'
 
         #
         # PICTURE SETTINGS
@@ -504,7 +543,7 @@ class Movie(object):
         if self.vobsub:
             options += ' -N {lang} -s scan'.format(lang=Config.language)
 
-        handbrake(self.path, options, self.destination)
+        handBrake(self.path, options, self.destination)
 
         self.encoded = True
 
@@ -534,8 +573,12 @@ def handBrake(file, options, dest):
     """
     c = '""' + Config.handBrake + '"' + ' -i ' + file + ' -o ' + dest + ' ' + \
         options + '"'
+
+    print ''
     print "HandBrake Settings:"
     print c
+    print ''
+
     os.system(c)
 
 def mkvExtract(file, command, dest):
@@ -606,6 +649,7 @@ def mkvInfo(movie):
         '(A_TRUEHD)\r': 'truehd',
         '(A_MP3)\r': 'mp3',
         '(A_MS/ACM)\r': 'acm',
+        '(A_PCM/INT/LIT)\r': 'pcm'
         }
 
     SUBTITLE_TYPES = {
@@ -673,8 +717,13 @@ def bdSup2Sub(file, options, dest, popen=False):
             list.
 
     """
-    c = '"' + Config.java + ' -jar ' + BD + ' ' +  options +\
-        ' -o ' + dest + ' ' + file + '"'
+    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' +  options +\
+        ' -o "' + dest + '" "' + file + '""'
+
+    print ''
+    print "Sending to bdSup2Sub"
+    print c
+    print ''
 
     if popen:
         return os.popen(c).read().split('\n')

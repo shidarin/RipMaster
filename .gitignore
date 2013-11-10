@@ -4,8 +4,12 @@ converted_movies.txt
 extracted_movies.txt
 new_movies.txt
 
-# We do not want to upload binary mkv files
+# We do not want to upload binary files
 *.mkv
+*.idx
+*.sup
+*.sub
+*.truehd
 
 #################
 ## Eclipse

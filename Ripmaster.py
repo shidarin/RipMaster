@@ -204,11 +204,19 @@ def get_movies(dir):
 def main():
     # TODO: Allow users to supply alt configs?
     config = Config('./Ripmaster.ini')
+    config.debug()
 
-    root = os.getcwd() + '/toConvert/'
+    root = os.getcwd() + '/toConvert_tests/'
 
     # TODO: Implement crash protection again by reading pickled movielist.
     movies = []
+
+    print ""
+    print "Found the following movies in progress:"
+    for entry in movies:
+        print entry.path
+    print ""
+    print "Adding the following new movies:"
 
     newMovies = get_movies(root)
 
@@ -216,6 +224,10 @@ def main():
         for raw in newMovies:
             if movie.path == raw.path:
                 newMovies.remove(raw)
+            else:
+                print raw.path
+
+    print ""
 
     movies.extend(newMovies)
 
