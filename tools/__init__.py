@@ -438,11 +438,13 @@ class Movie(object):
 
         for track in self.audioTracks:
             if track.fileType in EXTRACTABLE_AUDIO:
-                track.extractTrack()
+                if not track.extracted:
+                    track.extractTrack()
 
         for track in self.subtitleTracks:
             if track.fileType in EXTRACTABLE_SUBTITLE:
-                track.extractTrack()
+                if not track.extracted:
+                    track.extractTrack()
 
         self.extracted = True
 
@@ -453,7 +455,8 @@ class Movie(object):
         # read?
 
         for track in self.subtitleTracks:
-            track.convertTrack()
+            if not track.converted:
+                track.convertTrack()
 
         self.converted = True
 
