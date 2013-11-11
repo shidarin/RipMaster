@@ -62,8 +62,7 @@ While you can rip to an MKV file using whatever you wish, MakeMKV is probably
 the best option: http://www.makemkv.com/
 
 User's need to edit Ripmaster.ini and enter the paths to BDSupToSub, Java and
-HandBrakeCLI. Users need to convert windows \s into /s for these install
-locations.
+HandBrakeCLI.
 
 Users should also set their desired x264 speed, available options are:
 ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow

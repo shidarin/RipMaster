@@ -178,15 +178,15 @@ class Config(object):
                 if line.startswith('Java'):
                     Config.java = _stripAndRemove(
                         line, 'Java ='
-                    )
+                    ).replace('\\', '/')
                 elif line.startswith('BDSupToSub'):
                     Config.sup2Sub = _stripAndRemove(
                         line, 'BDSupToSub ='
-                    )
+                    ).replace('\\', '/')
                 elif line.startswith('HandbrakeCLI'):
                     Config.handBrake = _stripAndRemove(
                         line, 'HandbrakeCLI ='
-                    )
+                    ).replace('\\', '/')
                 elif line.startswith('x264 Speed'):
                     Config.x264Speed = _stripAndRemove(
                         line, 'x264 Speed ='
