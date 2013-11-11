@@ -243,26 +243,35 @@ def main():
     # TODO: Allow users to supply alt configs?
     config = Config('./Ripmaster.ini')
     config.debug()
+    print ""
 
     root = os.getcwd() + '/toConvert/'
 
-    # See if we have a backup copy. Our backup copy is more likely to be
-    # complete than the master. See issue #23 on github
-    # http://github.com/shidarin/RipMaster/issues/23
-    try:
-        copyfile("./movies.p.bak", "./movies.p")
-    except IOError:
-        pass
-
-    # TODO: We should really try the main file first before copying over the
-    # backup.
-
+    # Only during the Handbrake encode is the main pickle file emptied.
+    # Try and load the main pickle file instead of the backup, incase it's
+    # not empty.
     try:
         with open("./movies.p", "rb") as f:
             movies = pickle.load(f)
     except (IOError, EOFError):
-        print "No existing movie in process found. Starting from scratch"
-        movies = []
+        # See if we have a backup copy. Our backup copy is more likely to be
+        # complete than the master. See issue #23 on github
+        # http://github.com/shidarin/RipMaster/issues/23
+        print "Main movie list is bad (this happens if Ripmaster crashes " + \
+            "the encode stage. Loading from backup..."
+        try:
+            copyfile("./movies.p.bak", "./movies.p")
+        except IOError:
+            # If no backup exists, we're fresh as can be.
+            print "No backup found. Starting from scratch"
+            movies = []
+        else:
+            try:
+                with open("./movies.p", "rb") as f:
+                    movies = pickle.load(f)
+            except (IOError, EOFError):
+                print "Backup file is bad. Have to start from scratch."
+                movies = []
 
     print ""
     print "Found the following movies in progress:"
