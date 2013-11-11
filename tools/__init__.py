@@ -1,7 +1,7 @@
 #/usr/bin/python
 # Ripmaster.tools
 # Module containing tools used by Ripmaster
-# By Sean Wallitsch, 2013/11/05
+# By Sean Wallitsch, 2013/11/10
 
 """
 
