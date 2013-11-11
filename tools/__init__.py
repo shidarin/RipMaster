@@ -14,13 +14,17 @@ and processes on disk.
 Classes
 -------
 
+AudioTrack
+    Represents a single audio track within a <Movie>. Each AudioTrack in the mkv
+    gets an AudioTrack object, not just ones Handbrake can't handle.
+
 Config
     The Config object reads the Ripmaster.ini file for all the user set
     configuration options.
 
-AudioTrack
-    Represents a single audio track within a <Movie>. Each AudioTrack in the mkv
-    gets an AudioTrack object, not just ones Handbrake can't handle.
+Movie
+    Represents a single mkv file, contains <AudioTrack>s and <SubtitleTracks>s.
+    Calls all the extraction and conversion methods of it's children.
 
 SubtitleTrack
     Represents a single subtitle track within a <Movie>. Each subtitle track in
@@ -30,12 +34,12 @@ SubtitleTrack
     two subtitle tracks- one forced and the other containing every subtitle
     (both forced and not forced).
 
-Movie
-    Represents a single mkv file, contains <AudioTrack>s and <SubtitleTracks>s.
-    Calls all the extraction and conversion methods of it's children.
-
 Functions
 ---------
+
+bdSup2Sub()
+    CLI command builder for converting subtitle tracks with BDSup2Sub. For all
+    intents and purposes, this is the BDSup2Sub application.
 
 handbrake()
     CLI command builder for converting video and audio with Handbrake. For all
@@ -48,10 +52,6 @@ mkvExtract()
 mkvInfo()
     Uses mkvmerge to fetch names, filetypes and trackIDs for all audio, video
     and subtitle tracks from a given mkv.
-
-bdSup2Sub()
-    CLI command builder for converting subtitle tracks with BDSup2Sub. For all
-    intents and purposes, this is the BDSup2Sub application.
 
 """
 
@@ -134,6 +134,56 @@ def _stripAndRemove(string, remove=None):
 #===============================================================================
 # CLASSES
 #===============================================================================
+
+class AudioTrack(object):
+    """A single audio track.
+
+    Args:
+        movie : (<Movie>)
+            The parent <Movie> object that this <AudioTrack> is a child of.
+
+        trackID : (str)
+            The trackID of the audio track this object is to represent.
+
+        fileType : (str)
+            The filetype of this audiotrack.
+
+    """
+    def __init__(self, movie, trackID, fileType):
+        self.movie = movie
+        self.trackID = trackID
+        self.fileType = fileType
+        self.extracted = False
+        self.extractedAudio = None
+
+    def extractTrack(self):
+        """Extracts the audiotrack this object represents from the parent mkv"""
+        command = "{trackID}:".format(trackID=self.trackID)
+
+        # Derive the location to save the track to
+        fileName = self.movie.fileName.replace('.mkv', '')
+        fileName += "_Track{TrackID}_audio.{ext}".format(
+            TrackID=self.trackID,
+            ext=self.fileType
+        )
+
+        self.extractedAudio = os.path.join(
+            self.movie.root,
+            self.movie.subdir,
+            fileName
+        ).replace('\\', '/')
+
+        print ""
+        print "Extracting trackID {ID} of type {type} from {file}".format(
+            ID=self.trackID,
+            type=self.fileType,
+            file=self.movie.path
+        )
+        print ""
+
+        mkvExtract(self.movie.path, command, self.extractedAudio)
+
+        self.extracted = True
 
 class Config(object):
     """ Class containing the basic encoding environment as described by the .ini
@@ -278,214 +328,6 @@ class Config(object):
         print "Quality dictionary:"
         for entry in Config.quality:
             print entry + ":", Config.quality[entry]
-
-class AudioTrack(object):
-    """A single audio track.
-
-    Args:
-        movie : (<Movie>)
-            The parent <Movie> object that this <AudioTrack> is a child of.
-
-        trackID : (str)
-            The trackID of the audio track this object is to represent.
-
-        fileType : (str)
-            The filetype of this audiotrack.
-
-    """
-    def __init__(self, movie, trackID, fileType):
-        self.movie = movie
-        self.trackID = trackID
-        self.fileType = fileType
-        self.extracted = False
-        self.extractedAudio = None
-
-    def extractTrack(self):
-        """Extracts the audiotrack this object represents from the parent mkv"""
-        command = "{trackID}:".format(trackID=self.trackID)
-
-        # Derive the location to save the track to
-        fileName = self.movie.fileName.replace('.mkv', '')
-        fileName += "_Track{TrackID}_audio.{ext}".format(
-            TrackID=self.trackID,
-            ext=self.fileType
-        )
-
-        self.extractedAudio = os.path.join(
-            self.movie.root,
-            self.movie.subdir,
-            fileName
-        ).replace('\\', '/')
-
-        print ""
-        print "Extracting trackID {ID} of type {type} from {file}".format(
-            ID=self.trackID,
-            type=self.fileType,
-            file=self.movie.path
-        )
-        print ""
-
-        mkvExtract(self.movie.path, command, self.extractedAudio)
-
-        self.extracted = True
-
-class SubtitleTrack(object):
-    """A single subtitle track.
-
-    Args:
-        movie : (<Movie>)
-            The parent <Movie> object that this <SubtitleTrack> is a child of.
-
-        trackID : (str)
-            The trackID of the subtitle track this object is to represent.
-
-        fileType : (str)
-            The filetype of this subtitle track.
-
-    """
-    def __init__(self, movie, trackID, fileType):
-        self.movie = movie
-        self.trackID = trackID
-        self.fileType = fileType
-        self.extracted = False
-        self.extractedSup = None
-
-        # When converted, there will be an Idx file and a Sub file
-        self.converted = False
-        self.convertedIdx = None
-        self.convertedSub = None
-
-        # forced means the track contains forced flags
-        # forcedOnly means the track ONLY contains forced flags
-        self.forced = False
-        self.forcedOnly = False
-
-        # If a track contains both forced and unforced tracks, there will be an
-        # additional track saved out.
-        self.convertedIdxForced = None
-        self.convertedSubForced = None
-
-    def extractTrack(self):
-        """Extracts the subtitle this object represents from the parent mkv"""
-        command = "{trackID}:".format(trackID=str(self.trackID))
-
-        # Derive the location the track should be saved to
-        fileName = self.movie.fileName.replace('.mkv', '')
-        # TODO: Should this be locked into .sup?
-        fileName += "_Track{trackID}_sub.sup".format(trackID=self.trackID)
-
-        self.extractedSup = os.path.join(
-            self.movie.root,
-            self.movie.subdir,
-            fileName
-        ).replace('\\', '/')
-
-        print ""
-        print "Extracting trackID {ID} of type {type} from {file}".format(
-            ID=self.trackID,
-            type=self.fileType,
-            file=self.movie.path
-        )
-        print ""
-
-        mkvExtract(self.movie.path, command, self.extractedSup)
-
-        self.extracted = True
-
-    def convertTrack(self):
-        """Converts and resizes the subtitle track"""
-
-        print ""
-        print "Converting track {ID} at res: {res}p".format(
-            ID=self.trackID,
-            res=str(self.movie.resolution)
-        )
-
-        # BDSup2Sub doesn't take numerical values for resolution
-        if self.movie.resolution == 480:
-            res = 'ntsc'
-        else:
-            # Should be '1080p' or '720p'
-            res = "{res}p".format(res=str(self.movie.resolution))
-
-        # Our only option flag is really resolution
-        options = "-r {res}".format(res=res)
-
-        # Use the extractedSup as a baseline, replace the file extension
-        # We check for and replace the period to make sure we grab the ext
-        self.convertedIdx = self.extractedSup.replace('.sup', '.idx')
-        self.convertedSub = self.extractedSup.replace('.sup', '.sub')
-
-        print "Saving IDX file to {dest}".format(dest=self.convertedIdx)
-
-        # Using deprecated os.popen (easier) to put shell output in list
-        shellOut = bdSup2Sub(self.extractedSup, options, self.convertedIdx, popen=True)
-
-        # We need to check the results for FORCED subtitles
-        #
-        # If the amount of Forced subtitles is less than the total subs
-        # We'll just create a new .idx file in addition to the default one.
-        #
-        # If the amount of Forced subtitles is the same as the total subs,
-        # the entire subtitle track is forced, so we remove the resultFiles
-        # and create a new FORCED .idx
-
-        totalCount = 0
-
-        for line in shellOut:
-
-            print line
-
-            if line.startswith('#'):
-                lineList = line.split(' ')
-                # The last count entry from BD will set the total
-                try:
-                    totalCount = int(lineList[1])
-                except ValueError:
-                    pass
-
-            # There should only be 1 entry with 'forced' in it, that entry
-            # looks like:
-            #
-            # 'Detected 39 forced captions.'
-            if 'forced' in line:
-                forcedCaptions = int(line.split()[1])
-
-                if forcedCaptions > 0:
-                    self.forced = True
-                if forcedCaptions == totalCount:
-                    self.forcedOnly = True
-
-        print ""
-        print "Subtitle track has forced titles?", self.forced
-        print "Subtitle track is ONLY forced titles?", self.forcedOnly
-        print ""
-
-        if self.forced:
-            self.convertedIdxForced = self.convertedIdx.replace(
-                '.idx',
-                '_forced.idx'
-            )
-            self.convertedSubForced = self.convertedSub.replace(
-                '.sub',
-                '_forced.sub'
-            )
-
-        if self.forced and not self.forcedOnly:
-            # If some forced subtitles exist (but not the entire subtitle
-            # track is forced), we'll create a new _FORCED.idx in addition
-            # to the one already exported.
-            options += ' -D'
-
-            bdSup2Sub(self.extractedSup, options, self.convertedIdxForced)
-
-        elif self.forced and self.forcedOnly:
-            # If the track is entirely forced subtitles, we'll rename the
-            # extracted file to be the _forced file.
-            os.rename(self.convertedIdx, self.convertedIdxForced)
-            os.rename(self.convertedSub, self.convertedSubForced)
-
-        self.converted = True
 
 class Movie(object):
     """A movie file, with all video, audio and subtitle tracks
@@ -698,9 +540,207 @@ class Movie(object):
 
         self.encoded = True
 
+class SubtitleTrack(object):
+    """A single subtitle track.
+
+    Args:
+        movie : (<Movie>)
+            The parent <Movie> object that this <SubtitleTrack> is a child of.
+
+        trackID : (str)
+            The trackID of the subtitle track this object is to represent.
+
+        fileType : (str)
+            The filetype of this subtitle track.
+
+    """
+    def __init__(self, movie, trackID, fileType):
+        self.movie = movie
+        self.trackID = trackID
+        self.fileType = fileType
+        self.extracted = False
+        self.extractedSup = None
+
+        # When converted, there will be an Idx file and a Sub file
+        self.converted = False
+        self.convertedIdx = None
+        self.convertedSub = None
+
+        # forced means the track contains forced flags
+        # forcedOnly means the track ONLY contains forced flags
+        self.forced = False
+        self.forcedOnly = False
+
+        # If a track contains both forced and unforced tracks, there will be an
+        # additional track saved out.
+        self.convertedIdxForced = None
+        self.convertedSubForced = None
+
+    def extractTrack(self):
+        """Extracts the subtitle this object represents from the parent mkv"""
+        command = "{trackID}:".format(trackID=str(self.trackID))
+
+        # Derive the location the track should be saved to
+        fileName = self.movie.fileName.replace('.mkv', '')
+        # TODO: Should this be locked into .sup?
+        fileName += "_Track{trackID}_sub.sup".format(trackID=self.trackID)
+
+        self.extractedSup = os.path.join(
+            self.movie.root,
+            self.movie.subdir,
+            fileName
+        ).replace('\\', '/')
+
+        print ""
+        print "Extracting trackID {ID} of type {type} from {file}".format(
+            ID=self.trackID,
+            type=self.fileType,
+            file=self.movie.path
+        )
+        print ""
+
+        mkvExtract(self.movie.path, command, self.extractedSup)
+
+        self.extracted = True
+
+    def convertTrack(self):
+        """Converts and resizes the subtitle track"""
+
+        print ""
+        print "Converting track {ID} at res: {res}p".format(
+            ID=self.trackID,
+            res=str(self.movie.resolution)
+        )
+
+        # BDSup2Sub doesn't take numerical values for resolution
+        if self.movie.resolution == 480:
+            res = 'ntsc'
+        else:
+            # Should be '1080p' or '720p'
+            res = "{res}p".format(res=str(self.movie.resolution))
+
+        # Our only option flag is really resolution
+        options = "-r {res}".format(res=res)
+
+        # Use the extractedSup as a baseline, replace the file extension
+        # We check for and replace the period to make sure we grab the ext
+        self.convertedIdx = self.extractedSup.replace('.sup', '.idx')
+        self.convertedSub = self.extractedSup.replace('.sup', '.sub')
+
+        print "Saving IDX file to {dest}".format(dest=self.convertedIdx)
+
+        # Using deprecated os.popen (easier) to put shell output in list
+        shellOut = bdSup2Sub(self.extractedSup, options, self.convertedIdx, popen=True)
+
+        # We need to check the results for FORCED subtitles
+        #
+        # If the amount of Forced subtitles is less than the total subs
+        # We'll just create a new .idx file in addition to the default one.
+        #
+        # If the amount of Forced subtitles is the same as the total subs,
+        # the entire subtitle track is forced, so we remove the resultFiles
+        # and create a new FORCED .idx
+
+        totalCount = 0
+
+        for line in shellOut:
+
+            print line
+
+            if line.startswith('#'):
+                lineList = line.split(' ')
+                # The last count entry from BD will set the total
+                try:
+                    totalCount = int(lineList[1])
+                except ValueError:
+                    pass
+
+            # There should only be 1 entry with 'forced' in it, that entry
+            # looks like:
+            #
+            # 'Detected 39 forced captions.'
+            if 'forced' in line:
+                forcedCaptions = int(line.split()[1])
+
+                if forcedCaptions > 0:
+                    self.forced = True
+                if forcedCaptions == totalCount:
+                    self.forcedOnly = True
+
+        print ""
+        print "Subtitle track has forced titles?", self.forced
+        print "Subtitle track is ONLY forced titles?", self.forcedOnly
+        print ""
+
+        if self.forced:
+            self.convertedIdxForced = self.convertedIdx.replace(
+                '.idx',
+                '_forced.idx'
+            )
+            self.convertedSubForced = self.convertedSub.replace(
+                '.sub',
+                '_forced.sub'
+            )
+
+        if self.forced and not self.forcedOnly:
+            # If some forced subtitles exist (but not the entire subtitle
+            # track is forced), we'll create a new _FORCED.idx in addition
+            # to the one already exported.
+            options += ' -D'
+
+            bdSup2Sub(self.extractedSup, options, self.convertedIdxForced)
+
+        elif self.forced and self.forcedOnly:
+            # If the track is entirely forced subtitles, we'll rename the
+            # extracted file to be the _forced file.
+            os.rename(self.convertedIdx, self.convertedIdxForced)
+            os.rename(self.convertedSub, self.convertedSubForced)
+
+        self.converted = True
+
 #===============================================================================
 # FUNCTIONS
 #===============================================================================
+
+def bdSup2Sub(file, options, dest, popen=False):
+    """CLI command builder for converting susbtitles with BDSup2Sub
+
+    Args:
+        file : (str)
+            The source file the subtitles must be converted from.
+
+        options : (str)
+            Resolution, Forced Only and other CLI commands for BDSup2Sub
+
+        dest : (str)
+            Destination filename to be written to. If a pair of files, BDSup2Sub
+            will automatically write the paired file based off this string.
+
+        popen=False : (bool)
+            If True, os.popen will be used rather than os.system, and the read()
+            method will be returned, rather than just executed.
+
+    Raises:
+        N/A
+
+    Returns:
+        [str]
+            If popen=True, the console output of BDSup2Sub will be returned as a
+            list.
+
+    """
+    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' +  options +\
+        ' -o "' + dest + '" "' + file + '""'
+
+    print ''
+    print "Sending to bdSup2Sub"
+    print c
+    print ''
+
+    if popen:
+        return os.popen(c).read().split('\n')
+    else:
+        os.system(c)
 
 def handBrake(file, options, dest):
     """CLI command builder for converting video and audio with Handbrake
@@ -839,43 +879,3 @@ def mkvInfo(movie):
             videoTracks.append(int(lineList[0].replace('Track ID ', '')))
 
     return videoTracks, audioTracks, subtitleTracks
-
-def bdSup2Sub(file, options, dest, popen=False):
-    """CLI command builder for converting susbtitles with BDSup2Sub
-
-    Args:
-        file : (str)
-            The source file the subtitles must be converted from.
-
-        options : (str)
-            Resolution, Forced Only and other CLI commands for BDSup2Sub
-
-        dest : (str)
-            Destination filename to be written to. If a pair of files, BDSup2Sub
-            will automatically write the paired file based off this string.
-
-        popen=False : (bool)
-            If True, os.popen will be used rather than os.system, and the read()
-            method will be returned, rather than just executed.
-
-    Raises:
-        N/A
-
-    Returns:
-        [str]
-            If popen=True, the console output of BDSup2Sub will be returned as a
-            list.
-
-    """
-    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' +  options +\
-        ' -o "' + dest + '" "' + file + '""'
-
-    print ''
-    print "Sending to bdSup2Sub"
-    print c
-    print ''
-
-    if popen:
-        return os.popen(c).read().split('\n')
-    else:
-        os.system(c)
