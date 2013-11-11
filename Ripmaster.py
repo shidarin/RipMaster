@@ -1,7 +1,7 @@
 #/usr/bin/python
 # Ripmaster
 # A python script to string and automate various ripping processes
-# By Sean Wallitsch, 2013/09/04
+# By Sean Wallitsch, 2013/11/10
 
 """
 
@@ -37,11 +37,11 @@ Handbrake then converts the video track, compressing it according to user
 specified criteria, and auto-passing through all audio tracks (except audio
 tracks (like trueHD), which it cannot handle).
 
-Finally, mkvmerge takes all resulting files (the IDX-SUB subtitles, the
+Finally, we call mkvmerge to take all resulting files (IDX-SUB subtitles,
 extracted audio (if present) and the converted video), and merges them together,
 setting flags on 'forced' tracks correctly, and setting extracted audio as the
 default audio track if it's present (since these tracks are usually the highest
-quality).
+quality). NOTE: This is not available in this alpha release.
 
 If at any point in the process the computer crashes (normally during the
 Handbrake encoding), Ripmaster starts from the last completed task.
@@ -51,12 +51,12 @@ Initial Setup
 
 The following programs are required for Ripmaster to run:
 
-Python (2.6-2.7: http://www.python.org/)
-Java (http://java.com/en/download/index.jsp)
-MKVToolNix (http://www.bunkus.org/videotools/mkvtoolnix/)
-    MKVToolNix contains MKVMerge, MKVInfo and MKVExtract
-BDSup2Sub (v5+ by mjuhasz: https://github.com/mjuhasz/BDSup2Sub/wiki)
-Handbrake with CLI (I recommend v9.6 at this time http://handbrake.fr/)
+    Python (2.6-2.7: http://www.python.org/)
+    Java (http://java.com/en/download/index.jsp)
+    MKVToolNix (http://www.bunkus.org/videotools/mkvtoolnix/)
+        MKVToolNix contains MKVMerge, MKVInfo and MKVExtract
+    BDSup2Sub (v5+ by mjuhasz: https://github.com/mjuhasz/BDSup2Sub/wiki)
+    Handbrake with CLI (I recommend v9.6 at this time http://handbrake.fr/)
 
 While you can rip to an MKV file using whatever you wish, MakeMKV is probably
 the best option: http://www.makemkv.com/
@@ -65,20 +65,31 @@ User's need to edit Ripmaster.ini and enter the paths to BDSupToSub, Java and
 HandBrakeCLI.
 
 Users should also set their desired x264 speed, available options are:
-ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+
+    ultrafast,
+    superfast,
+    veryfast,
+    faster,
+    fast,
+    medium,
+    slow,
+    slower,
+    veryslow
+
 Default: slow
 
 If you desire a fallback audio other than AC3, you should set that here too.
 Options for fallback audio are:
 
-faac
-ffaac
-ffac3
-lame
-vorbis
-ffflac
+    faac
+    ffaac
+    ffac3
+    lame
+    vorbis
+    ffflac
 
 But note that not all of these support full surround sound.
+
 Default: ffac3
 
 Sample Ripmaster.ini file:
@@ -112,7 +123,7 @@ Leading and trailing whitespaces are automatically removed, but all entries
 are case sensitive. Make sure there's still a space between the argument
 and the '=' sign.
 
-Users need to Rip their own movies from disk, preferably using MakeMKV, then
+Users need to Rip their own movies from disk, probably using MakeMKV, then
 they need to decide on how they want each movie processed, this is done by
 changing the folder name that contains a single or multiple mkv files.
 
@@ -121,7 +132,7 @@ Encoding Instructions
 
 A sample folder name might be:
 
-Akira__1080_hq_animation
+    Akira__1080_hq_animation
 
 Anything before the double underscore ('__') is considered the title of the
 movie. Anything after is part of the instruction set.
@@ -130,7 +141,7 @@ RESOLUTION:
 
 You at least need a resolution, accepted arguments for this are:
 
-1080, 720, 480
+    1080, 720, 480
 
 If you don't provide a target resolution, it defaults to 1080 (although in the
 future it will try and pass through the incoming resolution).
@@ -139,7 +150,7 @@ QUALITY:
 
 Optionally, you can provide a quality preset:
 
-uq, hq, bq
+    uq, hq, bq
 
 This preset will be cross referenced with the resolution to get the 'rf' quality
 setting Handbrake will use for the video encode.
@@ -150,7 +161,14 @@ X264 TUNING:
 
 Selects the x264 tuning preset to be used. Options are:
 
-film animation grain stillimage psnr ssim fastdecode zerolatency
+    film
+    animation
+    grain
+    stillimage
+    psnr
+    ssim
+    fastdecode
+    zerolatency
 
 But it's recommended to only stick to 'film', 'animation', or 'grain'.
 
@@ -158,13 +176,13 @@ SET FPS:
 
 Some material needs to be 'forced' to a certain fps, especially DVD material:
 
-30p, 25p, 24p
+    30p, 25p, 24p
 
 DE-INTERLACING:
 
 If your file needs to be de-interlaced, give the instruction set:
 
-tv
+    tv
 
 And it will do a high quality de-interlacing pass.
 
@@ -189,8 +207,8 @@ Starting Fresh:
 If you mess something up, or you want to start an entire encode batch over again
 (say you changed the ini settings), simply delete the following from the folder:
 
-movies.p
-movies.p.bak
+    movies.p
+    movies.p.bak
 
 Once those are deleted, every movie ripmaster finds will be treated as a new
 movie to be converted.
@@ -203,7 +221,7 @@ movie to be converted.
 
 # Standard Imports
 import os
-import pickle
+import cPickle as pickle
 from shutil import copyfile
 
 # Ripmaster Imports
@@ -215,7 +233,7 @@ from tools import Config, Movie
 
 # Utility
 
-def get_movies(dir):
+def _get_movies(dir):
     """Gets the movies from the specified directory"""
     movieList = []
 
@@ -282,7 +300,7 @@ def main():
         print entry.path
     print ""
 
-    newMovies = get_movies(root)
+    newMovies = _get_movies(root)
 
     for movie in movies:
         for raw in newMovies:
@@ -339,4 +357,4 @@ if __name__ == "__main__":
     main()
 
 # Keep the shell up to show results
-raw_input('Press enter to close')
+raw_input('\n\nTask complete. Press enter to close')
