@@ -236,12 +236,15 @@ def get_movies(dir):
 
 #===============================================================================
 # MAIN
-#===============================================================================	
+#===============================================================================
 
 def main():
     """Main app process. This controls every step of the process"""
     # TODO: Allow users to supply alt configs?
     config = Config('./Ripmaster.ini')
+    if not config.configExists:
+        return
+
     config.debug()
     print ""
 

@@ -81,6 +81,26 @@ H264_PRESETS = [
 FPS_PRESETS = ['30p', '25p', '24p']
 EXTRACTABLE_AUDIO = ['truehd']
 EXTRACTABLE_SUBTITLE = ['pgs']
+SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
+BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
+
+x264 Speed = slow
+Baseline Quality
+    1080p = 20
+    720p = 20
+    480p = 20
+High Quality
+    1080p = 19
+    720p = 19
+    480p = 19
+Ultra Quality
+    1080p = 16
+    720p = 16
+    480p = 16
+
+Language = English
+Audio Fallback = ffac3"""
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -161,7 +181,26 @@ class Config(object):
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
     def __init__(self, iniFile):
-        self.getSettings(iniFile)
+        self.configExists = False
+        self.checkConfig(iniFile)
+        if self.configExists:
+            self.getSettings(iniFile)
+
+    def checkConfig(self, iniFile):
+        """Checks that the iniFile provided actually exists. Creates if not."""
+        if os.path.exists(iniFile):
+            self.configExists = True
+            return
+        else:
+            with open(iniFile, "w") as f:
+                f.write(SAMPLE_CONFIG)
+            print ""
+            print "PROCESS WILL FAIL"
+            print "You were missing the .ini file. I had to create one for you."
+            print "You'll find it in Ripmaster's folder, called Ripmaster.ini"
+            print "You need to specify the path for" + \
+                  " Java, BDSup2Sub and Handbrake.\n"
+            self.configExists = False
 
     def getSettings(self, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
