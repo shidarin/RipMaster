@@ -342,10 +342,11 @@ def main():
             with open("./movies.p", "wb") as f:
                 pickle.dump(movies, f)
         copyfile("./movies.p", "./movies.p.bak")
-    for movie in movies:
         if not movie.merged:
-            # TODO: Add mkvMerge
-            pass
+            movie.mergeMovie()
+            with open("./movies.p", "wb") as f:
+                pickle.dump(movies, f)
+        copyfile("./movies.p", "./movies.p.bak")
 
     print ""
     print "The following movies have been completed:"

@@ -540,6 +540,93 @@ class Movie(object):
 
         self.encoded = True
 
+    def mergeMovie(self):
+        """Uses mkvmerge to merge the movie and extracted/converted tracks"""
+
+        # First we'll set the destination filename by grabbing the movie title,
+        # and the source filename.
+        title = self.subdir.split('__')[0]
+        dFile = '"{root}/converted/{title}/{fName}"'.format(
+            root=os.getcwd(),
+            title=title,
+            fName=self.fileName
+        )
+
+        totalAudio = 0
+        totalSubs = 0
+
+        vidCommand = ''
+        audCommand = ''
+        subCommand = ''
+
+        # We do audio and subtitle commands first to see if we need to set a
+        # new default Audio and Subtitle track
+        for track in self.audioTracks:
+            if track.extracted:
+                totalAudio += 1
+                if totalAudio == 1:
+                    audCommand += ' --default-track -1:1'
+                audCommand += ' "{path}"'.format(
+                    path=track.extractedAudio
+                )
+
+        for track in self.subtitleTracks:
+            # We need to make sure the forcedOnly track goes first.
+            # So we'll actually be doing two loops through.
+            if track.extracted and track.forcedOnly:
+                totalSubs += 1
+                if totalSubs == 1:
+                    subCommand += ' --default-track -1:1'
+
+                subCommand += ' --forced-track -1:1 "{path}"'.format(
+                    path=track.convertedIdxForced
+                )
+            elif track.extracted and track.forced:
+                totalSubs += 1
+                if totalSubs == 1:
+                    subCommand += ' --default-track -1:1'
+
+                subCommand += ' --forced-track -1:1 "{path}"'.format(
+                    path=track.convertedIdxForced
+                )
+                subCommand += ' "{path}"'.format(
+                    path=track.convertedIdx
+                )
+        for track in self.subtitleTracks:
+            if track.extracted and not track.forced:
+                totalSubs += 1
+                if totalSubs == 1:
+                    subCommand += ' --default-track -1:1'
+                subCommand += ' "{path}"'.format(
+                    path=track.convertedIdx,
+                )
+
+        # We're going to create a sub-movie that represents the converted
+        # mkv file, to get information on it's tracks, etc.
+
+        convertedFName = self.fileName.replace('.mkv', '--converted.mkv')
+
+        converted = Movie(self.root, self.subdir, convertedFName)
+
+        if totalAudio:
+            for track in converted.audioTracks:
+                vidCommand += ' --default-track {trackID}:0'.format(
+                    trackID=track.trackID
+                )
+        if totalSubs:
+            for track in converted.subtitleTracks:
+                vidCommand += ' --default-track {trackID}:0'.format(
+                    trackID=track.trackID
+                )
+
+        vidCommand += ' "{path}"'.format(
+            path=self.destination
+        )
+
+        command = vidCommand + audCommand + subCommand
+
+        mkvmerge(command, dFile)
+
 class SubtitleTrack(object):
     """A single subtitle track.
 
@@ -879,3 +966,28 @@ def mkvInfo(movie):
             videoTracks.append(int(lineList[0].replace('Track ID ', '')))
 
     return videoTracks, audioTracks, subtitleTracks
+
+def mkvmerge(command, dest):
+    """CLI command builder for merging tracks with mkvmerge
+
+    Args:
+        command : (str)
+            The command to be executed. Source files must be included within
+            this command.
+
+        dest : (str)
+            The destination file to be written to.
+
+    Raises:
+        N/A
+
+    Returns:
+        None
+
+    """
+
+    c = "mkvmerge -o " + dest + command
+
+    print c
+
+    os.system(c)
