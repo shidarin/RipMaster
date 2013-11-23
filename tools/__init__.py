@@ -493,6 +493,8 @@ class Movie(object):
 
         if passthroughAudio:
             options += ' -a '
+        else:
+            options += ' -a none'
 
         for track in passthroughAudio:
             options += str(track.trackID)
