@@ -79,7 +79,7 @@ H264_PRESETS = [
     'zerolatency'
 ]
 FPS_PRESETS = ['30p', '25p', '24p']
-EXTRACTABLE_AUDIO = ['truehd']
+EXTRACTABLE_AUDIO = ['pcm', 'truehd']
 EXTRACTABLE_SUBTITLE = ['pgs']
 SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
 BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
