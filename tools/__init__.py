@@ -214,6 +214,7 @@ class Config(object):
 
     Language = English
     Audio Fallback = ffac3
+    Animation BFrames = 8
 
     Leading and trailing whitespaces are automatically removed, but all entries
     are case sensitive. Make sure there's still a space between the argument
@@ -227,6 +228,7 @@ class Config(object):
     x264Speed = 'slow'
     language = 'English'
     audioFallback = 'ffac3'
+    bFrames = None
 
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
@@ -316,6 +318,10 @@ class Config(object):
                     )
                 elif line.startswith('Language'):
                     Config.language = _stripAndRemove(line, 'Language =')
+                elif line.startswith('Animation BFrames'):
+                    Config.bFrames = _stripAndRemove(
+                        line, 'Animation BFrames ='
+                    )
 
     def debug(self):
         """Prints the current configuration"""
@@ -462,6 +468,10 @@ class Movie(object):
         # Encoder Tuning
         if self.preset:
             options += ' --x264-tune {preset}'.format(preset=self.preset)
+            if self.preset == 'animation' and Config.bFrames:
+                options += ' --encopts bframes={bFrames}'.format(
+                    bFrames=Config.bFrames
+                )
 
         # Encoder Quality
         options += ' -q {quality}'.format(quality=str(self.quality))
