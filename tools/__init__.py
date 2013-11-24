@@ -81,6 +81,18 @@ H264_PRESETS = [
 FPS_PRESETS = ['30p', '25p', '24p']
 EXTRACTABLE_AUDIO = ['pcm', 'truehd']
 EXTRACTABLE_SUBTITLE = ['pgs']
+BFRAMES = {
+    'ultrafast': 0,
+    'superfast': 3,
+    'veryfast': 3,
+    'faster': 3,
+    'fast': 3,
+    'medium': 3,
+    'slow': 3,
+    'slower': 3,
+    'veryslow': 8,
+    'placebo': 16
+}
 SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
 BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
 HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
@@ -100,7 +112,8 @@ Ultra Quality
     480p = 16
 
 Language = English
-Audio Fallback = ffac3"""
+Audio Fallback = ffac3
+Animation BFrames = 8"""
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -469,8 +482,11 @@ class Movie(object):
         if self.preset:
             options += ' --x264-tune {preset}'.format(preset=self.preset)
             if self.preset == 'animation' and Config.bFrames:
+                # If we've set additional animation bframes in the Config, we'll
+                # add those to the preset's built in bFrames now.
+                bFrames = str(BFRAMES[Config.x264Speed] + int(Config.bFrames))
                 options += ' --encopts bframes={bFrames}'.format(
-                    bFrames=Config.bFrames
+                    bFrames=bFrames
                 )
 
         # Encoder Quality

@@ -91,10 +91,10 @@ Options for fallback audio are:
 But note that not all of these support full surround sound.
 Default: ffac3
 
-If you want to specify the BFrames to be used with the 'animation' x264 tuning,
-set that with the Animation BFrames setting. If not present, only the BFrames
-specified by the speed preset and tune will be used. This will completely
-override the BFrames set by the tune and preset.
+If you want to specify additional BFrames to be used with the 'animation' x264
+tuning, set that with the Animation BFrames setting. If not present, only the
+BFrames specified by the speed preset and tune will be used. This will be in
+addition to the BFrames set by the speed preset, but will override the tune.
 Default: None
 
 Sample Ripmaster.ini file:
