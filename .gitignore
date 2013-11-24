@@ -5,6 +5,7 @@
 *.idx
 *.sup
 *.sub
+*.pcm
 *.truehd
 
 # Do not upload in progress pickle lists
