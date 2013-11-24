@@ -81,6 +81,18 @@ H264_PRESETS = [
 FPS_PRESETS = ['30p', '25p', '24p']
 EXTRACTABLE_AUDIO = ['pcm', 'truehd']
 EXTRACTABLE_SUBTITLE = ['pgs']
+BFRAMES = {
+    'ultrafast': 0,
+    'superfast': 3,
+    'veryfast': 3,
+    'faster': 3,
+    'fast': 3,
+    'medium': 3,
+    'slow': 3,
+    'slower': 3,
+    'veryslow': 8,
+    'placebo': 16
+}
 SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
 BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
 HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
@@ -100,7 +112,8 @@ Ultra Quality
     480p = 16
 
 Language = English
-Audio Fallback = ffac3"""
+Audio Fallback = ffac3
+Animation BFrames = 8"""
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -214,6 +227,7 @@ class Config(object):
 
     Language = English
     Audio Fallback = ffac3
+    Animation BFrames = 8
 
     Leading and trailing whitespaces are automatically removed, but all entries
     are case sensitive. Make sure there's still a space between the argument
@@ -227,6 +241,7 @@ class Config(object):
     x264Speed = 'slow'
     language = 'English'
     audioFallback = 'ffac3'
+    bFrames = None
 
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
@@ -316,6 +331,10 @@ class Config(object):
                     )
                 elif line.startswith('Language'):
                     Config.language = _stripAndRemove(line, 'Language =')
+                elif line.startswith('Animation BFrames'):
+                    Config.bFrames = _stripAndRemove(
+                        line, 'Animation BFrames ='
+                    )
 
     def debug(self):
         """Prints the current configuration"""
@@ -462,6 +481,13 @@ class Movie(object):
         # Encoder Tuning
         if self.preset:
             options += ' --x264-tune {preset}'.format(preset=self.preset)
+            if self.preset == 'animation' and Config.bFrames:
+                # If we've set additional animation bframes in the Config, we'll
+                # add those to the preset's built in bFrames now.
+                bFrames = str(BFRAMES[Config.x264Speed] + int(Config.bFrames))
+                options += ' --encopts bframes={bFrames}'.format(
+                    bFrames=bFrames
+                )
 
         # Encoder Quality
         options += ' -q {quality}'.format(quality=str(self.quality))
