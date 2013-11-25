@@ -671,10 +671,19 @@ class Movie(object):
         audioDefault = False
         subDefault = False
 
+        # This links the audio/subtitle fileIDs with the TrackIDs
+        audioIDs = []
+        subIDs = []
+        externalTracks = 0
+        # We need to track how many additional trackIDs we'll be creating.
+        trackIDoffset = 0
+
         # We do audio and subtitle commands first to see if we need to set a
         # new default Audio and Subtitle track
         for track in self.audioTracks:
             if track.extracted:
+                externalTracks += 1
+                FID = str(externalTracks)
                 if track.default and not audioDefault:
                     audCommand += ' --default-track -1:1'
                     audioDefault = True
@@ -684,46 +693,63 @@ class Movie(object):
                     lang=track.info['language'],
                     path=track.extractedAudio
                 )
+            else:
+                FID = '0'
+            audioFIDTID += '{FID}:{TID},'.format(FID=FID, TID=track.trackID)
 
+        # Remove trailing comma
+        if audioFIDTID.endswith(','):
+            audioFIDTID = audioFIDTID.rstrip(',')
+
+        # Run through our subtitle tracks
         for track in self.subtitleTracks:
-            # We need to make sure the forcedOnly track goes first.
-            # So we'll actually be doing two loops through.
-            if track.extracted and track.forcedOnly:
+            trackID = str(int(self.trackID) + trackIDoffset)
+            if track.extracted:
+                externalTracks += 1
+                FID = str(externalTracks)
+                # Check for default status
                 if track.default and not subDefault:
                     subCommand += ' --default-track -1:1'
                     subDefault = True
                 else:
                     subCommand += ' --default-track -1:0'
-                subCommand += \
-                    ' --language -1:{lang} --forced-track -1:1 "{path}"'.format(
-                        lang=track.info['language'],
-                        path=track.convertedIdxForced
-                    )
-            elif track.extracted and track.forced:
-                if track.default and not subDefault:
-                    subCommand += ' --default-track -1:1'
-                    subDefault = True
-                else:
-                    subCommand += ' --default-track -1:0'
-                subCommand += \
-                    ' --language -1:{lang} --forced-track -1:1 "{path}"'.format(
-                        lang=track.info['language'],
-                        path=track.convertedIdxForced
-                    )
-                subCommand += ' --language -1:{lang} "{path}"'.format(
-                    lang=track.info['language'],
-                    path=track.convertedIdx
+
+                # Add language flag
+                subCommand += ' --language -1:{lang}'.format(
+                    lang=track.info['language']
                 )
 
-        for track in self.subtitleTracks:
-            if track.extracted and not track.forced:
-                if track.default and not subDefault:
-                    subCommand += ' --default-track -1:1'
-                    subDefault = True
-                subCommand += ' --language -1:{lang} "{path}"'.format(
-                    lang=track.info['language'],
-                    path=track.convertedIdx,
-                )
+                # Deal with forced only tracks
+                if track.forcedOnly:
+                    subCommand += ' --forced-track -1:1 "{path}"'.format(
+                        path=track.convertedIdxForced
+                    )
+                else:
+                    if track.forced:
+                        subCommand += ' --forced-track -1:1 "{path}"'.format(
+                            path=track.convertedIdxForced
+                        )
+
+                        subFIDTID += '{FID}:{TID},'.format(FID=FID, TID=trackID)
+
+                        # Add non-default and language flag for non-forced track
+
+                        subCommand += \
+                            ' --default-track -1:0 --language -1:{lang}'.format(
+                            lang=track.info['language']
+                        )
+                        externalTracks += 1
+                        FID = str(externalTracks)
+                        trackIDoffset += 1
+                        trackID = str(int(self.trackID) + trackIDoffset)
+
+                    # Add non-forced track
+                    subCommand += ' "{path}"'.format(
+                        path=track.convertedIdx
+                    )
+            else:
+                FID = '0'
+            subFIDTID += '{FID}:{TID},'.format(FID=FID, TID=trackID)
 
         # We're going to create a sub-movie that represents the converted
         # mkv file, to get information on it's tracks, etc.
@@ -746,6 +772,14 @@ class Movie(object):
         vidCommand += ' "{path}"'.format(
             path=self.destination
         )
+
+        # We need to build the track order that mkvmerge will put the tracks
+        # in. It needs to mimic the original track order as closely as possible,
+        # skipping any extracted tracks but expanding tracks that had both
+        # forced and non-forced subtitles.
+
+        # We'll start with the default video track, which is always 0
+        trackOrder = ' --track-order 0:0'
 
         command = vidCommand + audCommand + subCommand
 
