@@ -1083,6 +1083,7 @@ def mkvInfo(movie):
     # Track ID 2: audio (A_TRUEHD) [...]
     # Track ID 3: subtitles (S_HDMV/PGS) [...]
 
+    # TODO: Fix EAC3 Support
     AUDIO_TYPES = {
         'A_AAC': 'aac',
         'A_DTS': 'dts',
@@ -1122,6 +1123,7 @@ def mkvInfo(movie):
             elif trackType == 'subtitles':
                 fileType = SUBTITLE_TYPES[trackDict['codec_id']]
                 track = SubtitleTrack(movie, trackID, fileType, trackDict)
+                subtitleTracks.append(track)
 
     return videoTracks, audioTracks, subtitleTracks
 
