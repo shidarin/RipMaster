@@ -864,6 +864,7 @@ def mkvInfo(movie):
         '(A_AAC)\r': 'aac',
         '(A_DTS)\r': 'dts',
         '(A_AC3)\r': 'ac3',
+        '(A_EAC3)\r': 'aec3',
         '(A_TRUEHD)\r': 'truehd',
         '(A_MP3)\r': 'mp3',
         '(A_MS/ACM)\r': 'acm',
