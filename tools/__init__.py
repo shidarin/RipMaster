@@ -1015,7 +1015,6 @@ def mkvInfo(movie):
     # Track ID 2: audio (A_TRUEHD) [...]
     # Track ID 3: subtitles (S_HDMV/PGS) [...]
 
-    # TODO: Fix EAC3 Support
     AUDIO_TYPES = {
         'A_AAC': 'aac',
         'A_DTS': 'dts',
