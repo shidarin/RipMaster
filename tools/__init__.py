@@ -526,9 +526,9 @@ class Movie(object):
             pass
 
         for track in self.audioTracks:
-            if track.fileType in EXTRACTABLE_AUDIO:
-                if not track.extracted:
-                    track.extractTrack()
+            # We're pulling every audio track present in the source mkv
+            # straight into the final merge mkv, so no need to extract
+            pass
 
         for track in self.subtitleTracks:
             if track.fileType in EXTRACTABLE_SUBTITLE:
@@ -592,32 +592,10 @@ class Movie(object):
         # AUDIO OPTIONS
         #
 
-        passthroughAudio = []
+        # We're no longer doing any audio encoding at the handbrake stage,
+        # instead merging every audio track straight from the original file.
 
-        for track in self.audioTracks:
-            if track.fileType not in EXTRACTABLE_AUDIO:
-                passthroughAudio.append(track)
-
-        if passthroughAudio:
-            options += ' -a '
-        else:
-            options += ' -a none'
-
-        for track in passthroughAudio:
-            options += str(track.trackID)
-            if track != passthroughAudio[-1]:
-                options += ','
-            else:
-                options += ' -E '
-        for track in passthroughAudio:
-            options += 'copy'
-            if track != passthroughAudio[-1]:
-                options += ','
-
-        if passthroughAudio:
-            options += ' --audio-fallback {codec}'.format(
-                codec=Config.audioFallback
-            )
+        options += ' -a none'
 
         #
         # PICTURE SETTINGS
@@ -668,45 +646,19 @@ class Movie(object):
         audCommand = ''
         subCommand = ''
 
-        audioDefault = False
         subDefault = False
-
-        # This links the audio/subtitle fileIDs with the TrackIDs
-        audioIDs = []
-        subIDs = []
-        externalTracks = 0
-        # We need to track how many additional trackIDs we'll be creating.
-        trackIDoffset = 0
 
         # We do audio and subtitle commands first to see if we need to set a
         # new default Audio and Subtitle track
-        for track in self.audioTracks:
-            if track.extracted:
-                externalTracks += 1
-                FID = str(externalTracks)
-                if track.default and not audioDefault:
-                    audCommand += ' --default-track -1:1'
-                    audioDefault = True
-                else:
-                    audCommand += ' --default-track -1:0'
-                audCommand += ' --language -1:{lang} "{path}"'.format(
-                    lang=track.info['language'],
-                    path=track.extractedAudio
-                )
-            else:
-                FID = '0'
-            audioFIDTID += '{FID}:{TID},'.format(FID=FID, TID=track.trackID)
 
-        # Remove trailing comma
-        if audioFIDTID.endswith(','):
-            audioFIDTID = audioFIDTID.rstrip(',')
+        # We'll be copying all the audio- and only the audio- from the source
+        # file.
+        audCommand += ' -D -S -B --no-chapters -M --no-global-tags'
+        audCommand += ' "{path}"'.format(path=self.path)
 
         # Run through our subtitle tracks
         for track in self.subtitleTracks:
-            trackID = str(int(self.trackID) + trackIDoffset)
             if track.extracted:
-                externalTracks += 1
-                FID = str(externalTracks)
                 # Check for default status
                 if track.default and not subDefault:
                     subCommand += ' --default-track -1:1'
@@ -730,56 +682,36 @@ class Movie(object):
                             path=track.convertedIdxForced
                         )
 
-                        subFIDTID += '{FID}:{TID},'.format(FID=FID, TID=trackID)
-
                         # Add non-default and language flag for non-forced track
 
                         subCommand += \
                             ' --default-track -1:0 --language -1:{lang}'.format(
                             lang=track.info['language']
                         )
-                        externalTracks += 1
-                        FID = str(externalTracks)
-                        trackIDoffset += 1
-                        trackID = str(int(self.trackID) + trackIDoffset)
 
                     # Add non-forced track
                     subCommand += ' "{path}"'.format(
                         path=track.convertedIdx
                     )
-            else:
-                FID = '0'
-            subFIDTID += '{FID}:{TID},'.format(FID=FID, TID=trackID)
 
         # We're going to create a sub-movie that represents the converted
-        # mkv file, to get information on it's tracks, etc.
+        # mkv file, to get information on it's subtitle tracks.
 
         convertedFName = self.fileName.replace('.mkv', '--converted.mkv')
 
         converted = Movie(self.root, self.subdir, convertedFName)
 
-        if audioDefault:
-            for track in converted.audioTracks:
-                vidCommand += ' --default-track {trackID}:0'.format(
-                    trackID=track.trackID
-                )
         if subDefault:
             for track in converted.subtitleTracks:
                 vidCommand += ' --default-track {trackID}:0'.format(
                     trackID=track.trackID
                 )
 
-        vidCommand += ' "{path}"'.format(
+        # We'll use -A to exclude any audio tracks that snuck in. There should
+        # not be any.
+        vidCommand += ' -A "{path}"'.format(
             path=self.destination
         )
-
-        # We need to build the track order that mkvmerge will put the tracks
-        # in. It needs to mimic the original track order as closely as possible,
-        # skipping any extracted tracks but expanding tracks that had both
-        # forced and non-forced subtitles.
-
-        # We'll start with the default video track, which is always 0
-        trackOrder = ' --track-order 0:0'
 
         command = vidCommand + audCommand + subCommand
 
@@ -1148,6 +1080,8 @@ def mkvmerge(command, dest):
 
     c = "mkvmerge -o " + dest + command
 
+    print ""
     print c
+    print ""
 
     os.system(c)
