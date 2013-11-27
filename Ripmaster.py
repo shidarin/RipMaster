@@ -277,7 +277,7 @@ def main():
     root = os.getcwd() + '/toConvert/'
 
     # Only during the Handbrake encode is the main pickle file emptied.
-    # Try and load the main pickle file instead of the backup, incase it's
+    # Try and load the main pickle file instead of the backup, in case it's
     # not empty.
     try:
         with open("./movies.p", "rb") as f:
@@ -350,10 +350,11 @@ def main():
             with open("./movies.p", "wb") as f:
                 pickle.dump(movies, f)
         copyfile("./movies.p", "./movies.p.bak")
-    for movie in movies:
         if not movie.merged:
-            # TODO: Add mkvMerge
-            pass
+            movie.mergeMovie()
+            with open("./movies.p", "wb") as f:
+                pickle.dump(movies, f)
+        copyfile("./movies.p", "./movies.p.bak")
 
     print ""
     print "The following movies have been completed:"

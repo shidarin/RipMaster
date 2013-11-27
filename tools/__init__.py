@@ -53,6 +53,9 @@ mkvInfo()
     Uses mkvmerge to fetch names, filetypes and trackIDs for all audio, video
     and subtitle tracks from a given mkv.
 
+mkvMerge()
+    Merges a converted movie, converted subtitles and any extracted audio tracks
+
 """
 
 #===============================================================================
@@ -61,6 +64,7 @@ mkvInfo()
 
 # Standard Imports
 import os
+from ast import literal_eval
 
 #===============================================================================
 # GLOBALS
@@ -144,6 +148,62 @@ def _stripAndRemove(string, remove=None):
 
     return stringFinal
 
+def _trackInfo(line):
+    """Takes a track line from mkvmerge -I and returns track information
+
+    Args:
+        line : (str)
+            A single line from mkvmerge -I's result.
+
+    Raises:
+        ValueError
+            Will be raised if line fed to _trackInfo is not a trackID line, or
+            known track type.
+
+    Returns:
+        (int), (str), (dict)
+            The track ID, the track type, and a dictionary
+            with additional information.
+
+    """
+    # If we are for some reason fed a line without a TrackID, raise
+    if not line.startswith('Track ID'):
+        raise ValueError, line + ' is not a Track ID line.'
+
+    # trackID identifies which track this is of the original mkv.
+    trackID = int(line.split(':')[0].replace('Track ID ', ''))
+
+    # The track type is right after the trackID. We'll make sure we find the
+    # actual track type (and not part of a title or other text) by including
+    # the whitespace and punctuation that surrounds it.
+    if ': video (' in line:
+        trackType = 'video'
+    elif ': audio (' in line:
+        trackType = 'audio'
+    elif ': subtitles (' in line:
+        trackType = 'subtitles'
+    else:
+        raise ValueError, line + ' does not contain a known track type.'
+
+    # By splitting on the opening and removing the closing bracket, we'll
+    # be left with only the track dictionary, but it will be in string form.
+    trackDict = line.split('[')[-1].replace(']\r', '')
+
+    # We need to add " marks around all entries, and comma seperate entries.
+    trackDict = trackDict.replace(' ', '", "')
+    trackDict = trackDict.replace(':', '": "')
+    trackDict = '{"' + trackDict + '"}'
+    trackDict = literal_eval(trackDict)
+
+    # Now we need to set some defaults. It's possible the track dictionary
+    # doesn't have these, and we'll be referencing them later.
+
+    trackDict.setdefault('default_track', '0')
+    trackDict.setdefault('forced_track', '0')
+    trackDict.setdefault('language', 'eng')
+
+    return trackID, trackType, trackDict
+
 #===============================================================================
 # CLASSES
 #===============================================================================
@@ -162,12 +222,15 @@ class AudioTrack(object):
             The filetype of this audiotrack.
 
     """
-    def __init__(self, movie, trackID, fileType):
+    def __init__(self, movie, trackID, fileType, infoDict):
         self.movie = movie
         self.trackID = trackID
         self.fileType = fileType
+        self.info = infoDict
         self.extracted = False
         self.extractedAudio = None
+
+        self.default = True if self.info['default_track'] == '1' else False
 
     def extractTrack(self):
         """Extracts the audiotrack this object represents from the parent mkv"""
@@ -377,8 +440,7 @@ class Movie(object):
 
         self.destination = self.path.replace('.mkv', '--converted.mkv')
 
-        # TODO: We should derive our default res based on the video track
-        self.resolution = 1080
+        self.resolution = None
         self.quality = None
         self.preset = None
         self.tv = False
@@ -396,6 +458,24 @@ class Movie(object):
 
         self._getTracks()
 
+        # If we don't have a resolution from instructions, we need to grab it
+        # from the first video track
+        if not self.resolution:
+            # pixel_dimensions in the video dictionary will return something
+            # formatted like '1920x1080'
+            self.resolution = self.videoTracks[0][1]['pixel_dimensions']
+            self.resolution = int(self.resolution.split('x')[-1])
+            # But if it's not a valid resolution, we'll default to 1080
+            if self.resolution not in RESOLUTIONS:
+                self.resolution = 1080
+
+        # Now that we're gauranteed to have a resolution, we can find the
+        # quality if it wasn't provided.
+        # If our self.quality is in the QUALITY list, it hasn't been set to a
+        # numerical quantity yet.
+        if self.quality in QUALITY:
+            self.quality = Config.quality[self.quality][str(self.resolution)]
+
         # Progress
 
         self.extracted = False
@@ -412,11 +492,14 @@ class Movie(object):
 
         # This is comparing against global variables at the top of the module
         for size in RESOLUTIONS:
-            if size in instructionSet:
+            if str(size) in instructionSet:
                 self.resolution = size
         for level in QUALITY:
             if level in instructionSet:
-                self.quality = Config.quality[level][str(self.resolution)]
+                if self.resolution:
+                    self.quality = Config.quality[level][str(self.resolution)]
+                else:
+                    self.quality = level
         for preset in H264_PRESETS:
             if preset in instructionSet:
                 self.preset = preset
@@ -426,8 +509,6 @@ class Movie(object):
                 self.fps = int(fps.replace('p', ''))
         if 'tv' in instructionSet:
             self.tv = True
-        if not self.quality:
-            self.quality = Config.quality['bq'][str(self.resolution)]
 
     def _getTracks(self):
         """Runs mkvInfo on the file to grab all the tracks, creating them"""
@@ -445,9 +526,9 @@ class Movie(object):
             pass
 
         for track in self.audioTracks:
-            if track.fileType in EXTRACTABLE_AUDIO:
-                if not track.extracted:
-                    track.extractTrack()
+            # We're pulling every audio track present in the source mkv
+            # straight into the final merge mkv, so no need to extract
+            pass
 
         for track in self.subtitleTracks:
             if track.fileType in EXTRACTABLE_SUBTITLE:
@@ -511,32 +592,10 @@ class Movie(object):
         # AUDIO OPTIONS
         #
 
-        passthroughAudio = []
+        # We're no longer doing any audio encoding at the handbrake stage,
+        # instead merging every audio track straight from the original file.
 
-        for track in self.audioTracks:
-            if track.fileType not in EXTRACTABLE_AUDIO:
-                passthroughAudio.append(track)
-
-        if passthroughAudio:
-            options += ' -a '
-        else:
-            options += ' -a none'
-
-        for track in passthroughAudio:
-            options += str(track.trackID)
-            if track != passthroughAudio[-1]:
-                options += ','
-            else:
-                options += ' -E '
-        for track in passthroughAudio:
-            options += 'copy'
-            if track != passthroughAudio[-1]:
-                options += ','
-
-        if passthroughAudio:
-            options += ' --audio-fallback {codec}'.format(
-                codec=Config.audioFallback
-            )
+        options += ' -a none'
 
         #
         # PICTURE SETTINGS
@@ -568,6 +627,98 @@ class Movie(object):
 
         self.encoded = True
 
+    def mergeMovie(self):
+        """Uses mkvmerge to merge the movie and extracted/converted tracks"""
+
+        # First we'll set the destination filename by grabbing the movie title,
+        # and the source filename.
+        title = self.subdir.split('__')[0]
+        dFile = '"{root}/converted/{title}/{fName}"'.format(
+            root=os.getcwd(),
+            title=title,
+            fName=self.fileName
+        )
+
+        totalAudio = 0
+        totalSubs = 0
+
+        vidCommand = ''
+        audCommand = ''
+        subCommand = ''
+
+        subDefault = False
+
+        # We do audio and subtitle commands first to see if we need to set a
+        # new default Audio and Subtitle track
+
+        # We'll be copying all the audio- and only the audio- from the source
+        # file.
+        audCommand += ' -D -S -B --no-chapters -M --no-global-tags'
+        audCommand += ' "{path}"'.format(path=self.path)
+
+        # Run through our subtitle tracks
+        for track in self.subtitleTracks:
+            if track.extracted:
+                # Check for default status
+                if track.default and not subDefault:
+                    subCommand += ' --default-track -1:1'
+                    subDefault = True
+                else:
+                    subCommand += ' --default-track -1:0'
+
+                # Add language flag
+                subCommand += ' --language -1:{lang}'.format(
+                    lang=track.info['language']
+                )
+
+                # Deal with forced only tracks
+                if track.forcedOnly:
+                    subCommand += ' --forced-track -1:1 "{path}"'.format(
+                        path=track.convertedIdxForced
+                    )
+                else:
+                    if track.forced:
+                        subCommand += ' --forced-track -1:1 "{path}"'.format(
+                            path=track.convertedIdxForced
+                        )
+
+                        # Add non-default and language flag for non-forced track
+
+                        subCommand += \
+                            ' --default-track -1:0 --language -1:{lang}'.format(
+                            lang=track.info['language']
+                        )
+
+                    # Add non-forced track
+                    subCommand += ' "{path}"'.format(
+                        path=track.convertedIdx
+                    )
+
+        # We're going to create a sub-movie that represents the converted
+        # mkv file, to get information on it's subtitle tracks.
+
+        convertedFName = self.fileName.replace('.mkv', '--converted.mkv')
+
+        converted = Movie(self.root, self.subdir, convertedFName)
+
+        if subDefault:
+            for track in converted.subtitleTracks:
+                vidCommand += ' --default-track {trackID}:0'.format(
+                    trackID=track.trackID
+                )
+
+        # We'll use -A to exclude any audio tracks that snuck in. There should
+        # not be any.
+        vidCommand += ' -A "{path}"'.format(
+            path=self.destination
+        )
+
+        command = vidCommand + audCommand + subCommand
+
+        mkvmerge(command, dFile)
+
+        self.merged = True
+
 class SubtitleTrack(object):
     """A single subtitle track.
 
@@ -582,10 +733,11 @@ class SubtitleTrack(object):
             The filetype of this subtitle track.
 
     """
-    def __init__(self, movie, trackID, fileType):
+    def __init__(self, movie, trackID, fileType, infoDict):
         self.movie = movie
         self.trackID = trackID
         self.fileType = fileType
+        self.info = infoDict
         self.extracted = False
         self.extractedSup = None
 
@@ -603,6 +755,9 @@ class SubtitleTrack(object):
         # additional track saved out.
         self.convertedIdxForced = None
         self.convertedSubForced = None
+
+        # Default track means this is the main subtitle track
+        self.default = True if self.info['default_track'] == '1' else False
 
     def extractTrack(self):
         """Extracts the subtitle this object represents from the parent mkv"""
@@ -847,64 +1002,86 @@ def mkvInfo(movie):
 
     # mkvMerge will return a listing of each track
     # TODO: Remove deprecated popen
-    info = os.popen('"mkvmerge -i ' + file + '"').read()
+    info = os.popen('"mkvmerge -I ' + file + '"').read()
     info = info.split('\n')
 
     # info is now a list, each entry a line
     #
     # Example:
     #
-    # File 'I:\Rips\RawBR\Jack_Reacher\Jack_Reacher_t01.mkv': container: Matroska
-    # Track ID 0: video (V_MPEG4/ISO/AVC)
-    # Track ID 1: audio (A_AC3)
-    # Track ID 2: audio (A_TRUEHD)
-    # Track ID 3: subtitles (S_HDMV/PGS)
+    # File 'I:\Ripmaster\toConvert\JR__1080\JR_t01.mkv': container: Matroska []
+    # Track ID 0: video (V_MPEG4/ISO/AVC) [...]
+    # Track ID 1: audio (A_AC3) [...]
+    # Track ID 2: audio (A_TRUEHD) [...]
+    # Track ID 3: subtitles (S_HDMV/PGS) [...]
 
+    # TODO: Fix EAC3 Support
     AUDIO_TYPES = {
-        '(A_AAC)\r': 'aac',
-        '(A_DTS)\r': 'dts',
-        '(A_AC3)\r': 'ac3',
-        '(A_EAC3)\r': 'aec3',
-        '(A_TRUEHD)\r': 'truehd',
-        '(A_MP3)\r': 'mp3',
-        '(A_MS/ACM)\r': 'acm',
-        '(A_PCM/INT/LIT)\r': 'pcm'
+        'A_AAC': 'aac',
+        'A_DTS': 'dts',
+        'A_AC3': 'ac3',
+        'A_EAC3': 'aec3',
+        'A_TRUEHD': 'truehd',
+        'A_MP3': 'mp3',
+        'A_MS/ACM': 'acm',
+        'A_PCM/INT/LIT': 'pcm'
         }
 
     SUBTITLE_TYPES = {
-        '(S_VOBSUB)\r': 'vobsub',
-        '(S_HDMV/PGS)\r': 'pgs'
+        'S_VOBSUB': 'vobsub',
+        'S_HDMV/PGS': 'pgs'
         }
 
     trackList = []
 
-    for line in info:
-        if 'Track ID' in line:
-            trackList.append(line)
-
-    # trackList now only contains the lines with Track in them
+    # trackList now only contains the lines with Track ID in them
 
     subtitleTracks = []
     audioTracks = []
     videoTracks = [] # No plans to use video tracks for now
 
-    for line in trackList:
-         # Splitting on ':' gives us the ID on one side, the type on the other
-        lineList = line.split(':')
+    for line in info:
+        if line.startswith('Track ID'):
+            trackID, trackType, trackDict = _trackInfo(line)
 
-        if 'subtitles' in lineList[1]:
-            trackID = int(lineList[0].replace('Track ID ', ''))
-            fileType = SUBTITLE_TYPES[lineList[1].replace(' subtitles ', '')]
-            track = SubtitleTrack(movie, trackID, fileType)
-            subtitleTracks.append(track)
-
-        elif 'audio' in lineList[1]:
-            trackID = int(lineList[0].replace('Track ID ', ''))
-            fileType = AUDIO_TYPES[lineList[1].replace(' audio ', '')]
-            track = AudioTrack(movie, trackID, fileType)
-            audioTracks.append(track)
-
-        elif 'video' in lineList[1]:
-            videoTracks.append(int(lineList[0].replace('Track ID ', '')))
+            if trackType == 'video':
+                # Since video tracks aren't really used right now, we'll just
+                # throw this stuff into a list.
+                videoTracks.append([trackID, trackDict])
+            elif trackType == 'audio':
+                fileType = AUDIO_TYPES[trackDict['codec_id']]
+                track = AudioTrack(movie, trackID, fileType, trackDict)
+                audioTracks.append(track)
+            elif trackType == 'subtitles':
+                fileType = SUBTITLE_TYPES[trackDict['codec_id']]
+                track = SubtitleTrack(movie, trackID, fileType, trackDict)
+                subtitleTracks.append(track)
 
     return videoTracks, audioTracks, subtitleTracks
+
+def mkvmerge(command, dest):
+    """CLI command builder for merging tracks with mkvmerge
+
+    Args:
+        command : (str)
+            The command to be executed. Source files must be included within
+            this command.
+
+        dest : (str)
+            The destination file to be written to.
+
+    Raises:
+        N/A
+
+    Returns:
+        None
+
+    """
+
+    c = "mkvmerge -o " + dest + command
+
+    print ""
+    print c
+    print ""
+
+    os.system(c)
