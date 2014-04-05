@@ -63,8 +63,9 @@ mkvMerge()
 #===============================================================================
 
 # Standard Imports
-import os
 from ast import literal_eval
+import os
+from subprocess import Popen, PIPE
 
 #===============================================================================
 # GLOBALS
@@ -100,6 +101,8 @@ BFRAMES = {
 SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
 BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
 HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
+mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
+mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
 
 x264 Speed = slow
 Baseline Quality
@@ -187,7 +190,7 @@ def _trackInfo(line):
 
     # By splitting on the opening and removing the closing bracket, we'll
     # be left with only the track dictionary, but it will be in string form.
-    trackDict = line.split('[')[-1].replace(']\r', '')
+    trackDict = line.split('[')[-1].replace(']\r\n', '')
 
     # We need to add " marks around all entries, and comma seperate entries.
     trackDict = trackDict.replace(' ', '", "')
@@ -273,6 +276,8 @@ class Config(object):
     Java = C:/Program Files (x86)/Java/jre7/bin/java
     BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
     HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
+    mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
+    mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
 
     x264 Speed = slow
     Baseline Quality
@@ -301,6 +306,8 @@ class Config(object):
     java = ''
     sup2Sub = ''
     handBrake = ''
+    mkvMerge = ''
+    mkvExtract = ''
     x264Speed = 'slow'
     language = 'English'
     audioFallback = 'ffac3'
@@ -333,7 +340,7 @@ class Config(object):
     def getSettings(self, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
         print "Reading config from:", iniFile
-        print ""
+        print
 
         with open(iniFile, "r") as f:
             # splitlines() will give us a list of each line.
@@ -353,6 +360,14 @@ class Config(object):
                 elif line.startswith('HandbrakeCLI'):
                     Config.handBrake = _stripAndRemove(
                         line, 'HandbrakeCLI ='
+                    ).replace('\\', '/')
+                elif line.startswith('mkvMerge'):
+                    Config.mkvMerge = _stripAndRemove(
+                        line, 'mkvMerge ='
+                    ).replace('\\', '/')
+                elif line.startswith('mkvExtract'):
+                    Config.mkvExtract = _stripAndRemove(
+                        line, 'mkvExtract ='
                     ).replace('\\', '/')
                 elif line.startswith('x264 Speed'):
                     Config.x264Speed = _stripAndRemove(
@@ -404,6 +419,8 @@ class Config(object):
         print "Java at:", Config.java
         print "BDSup2Sub at:", Config.sup2Sub
         print "Handbrake at:", Config.handBrake
+        print "mkvMerge at:", Config.mkvMerge
+        print "mkvExtract at:", Config.mkvExtract
         print "x624speed set to:", Config.x264Speed
         print "Default language:", Config.language
         print "Audio Codec Fallback:", Config.audioFallback
@@ -633,7 +650,7 @@ class Movie(object):
         # First we'll set the destination filename by grabbing the movie title,
         # and the source filename.
         title = self.subdir.split('__')[0]
-        dFile = '"{root}/converted/{title}/{fName}"'.format(
+        dFile = '{root}/converted/{title}/{fName}'.format(
             root=os.getcwd(),
             title=title,
             fName=self.fileName
@@ -642,9 +659,9 @@ class Movie(object):
         totalAudio = 0
         totalSubs = 0
 
-        vidCommand = ''
-        audCommand = ''
-        subCommand = ''
+        vidCommand = []
+        audCommand = []
+        subCommand = []
 
         subDefault = False
 
@@ -653,46 +670,40 @@ class Movie(object):
 
         # We'll be copying all the audio- and only the audio- from the source
         # file.
-        audCommand += ' -D -S -B --no-chapters -M --no-global-tags'
-        audCommand += ' "{path}"'.format(path=self.path)
+        #audCommand += ' -D -S -B --no-chapters -M --no-global-tags'
+        #audCommand += ' "{path}"'.format(path=self.path)
+        audCommand.extend(['-D', '-S', '-B', '--no-chapters', '-M', '--no-global-tags', self.path])
 
         # Run through our subtitle tracks
         for track in self.subtitleTracks:
             if track.extracted:
                 # Check for default status
                 if track.default and not subDefault:
-                    subCommand += ' --default-track -1:1'
+                    subCommand.extend(['--default-track', '-1:1'])
                     subDefault = True
                 else:
-                    subCommand += ' --default-track -1:0'
+                    subCommand.extend(['--default-track', '-1:0'])
 
                 # Add language flag
-                subCommand += ' --language -1:{lang}'.format(
+                subCommand.extend(['--language', '-1:{lang}'.format(
                     lang=track.info['language']
-                )
+                )])
 
                 # Deal with forced only tracks
                 if track.forcedOnly:
-                    subCommand += ' --forced-track -1:1 "{path}"'.format(
-                        path=track.convertedIdxForced
-                    )
+                    subCommand.extend(['--forced-track', '-1:1', track.convertedIdxForced])
                 else:
                     if track.forced:
-                        subCommand += ' --forced-track -1:1 "{path}"'.format(
-                            path=track.convertedIdxForced
-                        )
+                        subCommand.extend(['--forced-track', '-1:1', track.convertedIdxForced])
 
                         # Add non-default and language flag for non-forced track
 
-                        subCommand += \
-                            ' --default-track -1:0 --language -1:{lang}'.format(
+                        subCommand.extend(['--default-track', '-1:0', '--language', '-1:{lang}'.format(
                             lang=track.info['language']
-                        )
+                        )])
 
                     # Add non-forced track
-                    subCommand += ' "{path}"'.format(
-                        path=track.convertedIdx
-                    )
+                    subCommand.append(track.convertedIdx)
 
         # We're going to create a sub-movie that represents the converted
         # mkv file, to get information on it's subtitle tracks.
@@ -703,15 +714,13 @@ class Movie(object):
 
         if subDefault:
             for track in converted.subtitleTracks:
-                vidCommand += ' --default-track {trackID}:0'.format(
+                vidCommand.extend(['--default-track', '{trackID}:0'.format(
                     trackID=track.trackID
-                )
+                )])
 
         # We'll use -A to exclude any audio tracks that snuck in. There should
         # not be any.
-        vidCommand += ' -A "{path}"'.format(
-            path=self.destination
-        )
+        vidCommand.extend(['-A', self.destination])
 
         command = vidCommand + audCommand + subCommand
 
@@ -876,6 +885,17 @@ class SubtitleTrack(object):
         elif self.forced and self.forcedOnly:
             # If the track is entirely forced subtitles, we'll rename the
             # extracted file to be the _forced file.
+
+            # First we need to see if the file already exists, as renaming
+            # will fail if it does.
+            # If it exists, we'll assume that something went wrong, and
+            # delete it.
+            if os.path.isfile(self.convertedIdxForced):
+                os.remove(self.convertedIdxForced)
+            if os.path.isfile(self.convertedSubForced):
+                os.remove(self.convertedSubForced)
+
+            # Now for the renaming.
             os.rename(self.convertedIdx, self.convertedIdxForced)
             os.rename(self.convertedSub, self.convertedSubForced)
 
@@ -979,7 +999,13 @@ def mkvExtract(file, command, dest):
     '"mkvextract tracks I:/src/fold/file.mkv 3:I:/dest/fold/subtitle.sup "'
 
     """
-    os.system('"mkvextract tracks ' + file + ' ' + command + dest + ' "')
+    # os.system('"mkvextract tracks ' + file + ' ' + command + dest + ' "')
+    os.system('""{mkvExtract}" tracks "{file}" {command}{dest} "'.format(
+        mkvExtract=Config.mkvExtract,
+        file=file,
+        command=command,
+        dest=dest
+    ))
 
 def mkvInfo(movie):
     """Uses CLI to fetch names all audio, video and subtitle tracks from a mkv
@@ -1001,11 +1027,13 @@ def mkvInfo(movie):
     file = movie.path
 
     # mkvMerge will return a listing of each track
-    # TODO: Remove deprecated popen
-    info = os.popen('"mkvmerge -I ' + file + '"').read()
-    info = info.split('\n')
+    info = Popen(
+        [Config.mkvMerge, '-I', file],
+        shell=True,
+        stdout=PIPE
+    ).stdout
 
-    # info is now a list, each entry a line
+    # info is now a file object, each entry a line
     #
     # Example:
     #
@@ -1031,15 +1059,11 @@ def mkvInfo(movie):
         'S_HDMV/PGS': 'pgs'
         }
 
-    trackList = []
-
-    # trackList now only contains the lines with Track ID in them
-
     subtitleTracks = []
     audioTracks = []
     videoTracks = [] # No plans to use video tracks for now
 
-    for line in info:
+    for line in info.readlines():
         if line.startswith('Track ID'):
             trackID, trackType, trackDict = _trackInfo(line)
 
@@ -1077,10 +1101,22 @@ def mkvmerge(command, dest):
 
     """
 
-    c = "mkvmerge -o " + dest + command
+    #c = Config.mkvMerge + " -o " + dest + command
+    #c = '"{mkvMerge}" -o {dest}{command}'.format(
+    #    mkvMerge=Config.mkvMerge,
+    #    dest=dest,
+    #    command=command
+    #)
+    commands = [Config.mkvMerge, '-o']
+    commands.append(dest)
+    commands.extend(command)
 
     print ""
-    print c
+    print commands
     print ""
 
-    os.system(c)
+    from subprocess import check_call
+    try:
+        check_call(commands)
+    except:
+        raw_input("oops")
