@@ -106,6 +106,8 @@ Sample Ripmaster.ini file:
 Java = C:/Program Files (x86)/Java/jre7/bin/java
 BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
 HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
+mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
+mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
 
 x264 Speed = slow
 Baseline Quality
@@ -247,9 +249,8 @@ def _get_movies(dir):
 
     directories = os.listdir(dir)
     for d in directories:
-        # We need to remove directories without instruction sets
+        # We need to skip past directories without instruction sets
         if '__' not in d:
-            directories.remove(d)
             continue
         files = os.listdir("{root}/{subdir}".format(root=dir, subdir=d))
         for f in files:
@@ -272,7 +273,7 @@ def main():
         return
 
     config.debug()
-    print ""
+    print
 
     root = os.getcwd() + '/toConvert/'
 
@@ -302,22 +303,26 @@ def main():
                 print "Backup file is bad. Have to start from scratch."
                 movies = []
 
-    print ""
+    print
     print "Found the following movies in progress:"
     for entry in movies:
         print entry.path
-    print ""
+    print
 
     newMovies = _get_movies(root)
+    duplicates = []
 
     for movie in movies:
         for raw in newMovies:
             # If a movie that get_movies() found already matches a movie in our
             # pickled list, we should remove it, otherwise we'll add it twice.
             if movie.path == raw.path:
-                newMovies.remove(raw)
+                duplicates.append(raw)
 
-    print ""
+    for dup in duplicates:
+        newMovies.remove(dup)
+
+    print
 
     # Now that we've removed duplicates, we'll extend the main list of movie
     # objects by the new movies found.
@@ -327,34 +332,34 @@ def main():
     for entry in movies:
         print entry.path
 
-    with open("./movies.p", "wb") as f:
+    with open("./movies.p.bak", "wb") as f:
         pickle.dump(movies, f)
-    # Create a copy immediately after a successful dump
-    copyfile("./movies.p", "./movies.p.bak")
+    # Copy the temp file to the master
+    copyfile("./movies.p.bak", "./movies.p")
 
     for movie in movies:
         if not movie.extracted:
             movie.extractTracks()
-            with open("./movies.p", "wb") as f:
+            with open("./movies.p.bak", "wb") as f:
                 pickle.dump(movies, f)
-        copyfile("./movies.p", "./movies.p.bak")
+        copyfile("./movies.p.bak", "./movies.p")
     for movie in movies:
         if not movie.converted:
             movie.convertTracks()
-            with open("./movies.p", "wb") as f:
+            with open("./movies.p.bak", "wb") as f:
                 pickle.dump(movies, f)
-        copyfile("./movies.p", "./movies.p.bak")
+        copyfile("./movies.p.bak", "./movies.p")
     for movie in movies:
         if not movie.encoded:
             movie.encodeMovie()
-            with open("./movies.p", "wb") as f:
+            with open("./movies.p.bak", "wb") as f:
                 pickle.dump(movies, f)
-        copyfile("./movies.p", "./movies.p.bak")
+        copyfile("./movies.p.bak", "./movies.p")
         if not movie.merged:
             movie.mergeMovie()
-            with open("./movies.p", "wb") as f:
+            with open("./movies.p.bak", "wb") as f:
                 pickle.dump(movies, f)
-        copyfile("./movies.p", "./movies.p.bak")
+        copyfile("./movies.p.bak", "./movies.p")
 
     print ""
     print "The following movies have been completed:"
