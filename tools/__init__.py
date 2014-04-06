@@ -325,7 +325,32 @@ class Config(object):
     def __init__(self, iniFile):
         # This will either return True or raise an exception
         if self.checkConfig(iniFile):
-            self.getSettings(iniFile)
+            try:
+                self.getSettings(iniFile)
+            except (ConfigParser.NoOptionError or
+                        ConfigParser.NoSectionError), ex:
+                # NoOptionError strings to:
+                # No option 'djkas' in section: 'Programs'
+                # NoSectionError strings to:
+                # No section: 'Programsss'
+                # Both are index 2
+                error = str(ex).split()[2].replace("'", '')
+
+                if ex.__class__ is ConfigParser.NoOptionError:
+                    exception = 'option'
+                    # We also want to add the section to option errors, so
+                    # we'll pull it from the last index.
+                    error += " from section: "
+                    error += str(ex).split()[-1].replace("'", '')
+                elif ex.__class__ is ConfigParser.NoSectionError:
+                    exception = 'section'
+
+                message = "Missing the ini {type}: {err}. Please fill the " \
+                          "missing options and retry.".format(
+                    type=exception,
+                    err=error,
+                )
+                raise ValueError(message)
 
     def checkConfig(self, iniFile):
         """Checks that the iniFile provided actually exists. Creates if not.

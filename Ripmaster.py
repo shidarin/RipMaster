@@ -273,7 +273,9 @@ def main():
     # TODO: Allow users to supply alt configs?
     try:
         config = Config('./Ripmaster.ini')
-    except IOError, ex:
+    # IOError will raise if iniFile is not found. ValueError will raise if
+    # iniFile is missing options.
+    except (IOError or ValueError), ex:
         print ex
         return
 
