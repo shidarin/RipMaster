@@ -64,6 +64,8 @@ mkvMerge()
 
 # Standard Imports
 from ast import literal_eval
+import ConfigParser
+from threading import Lock
 import os
 from subprocess import Popen, PIPE
 
@@ -98,29 +100,36 @@ BFRAMES = {
     'veryslow': 8,
     'placebo': 16
 }
-SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
-BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
-mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
-mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
+SAMPLE_CONFIG = """[Programs]
+BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+Java: C://Program Files (x86)/Java/jre7/bin/java
+mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-x264 Speed = slow
-Baseline Quality
-    1080p = 20
-    720p = 20
-    480p = 20
-High Quality
-    1080p = 19
-    720p = 19
-    480p = 19
-Ultra Quality
-    1080p = 16
-    720p = 16
-    480p = 16
+[Handbrake Settings]
+animation_BFrames: 8
+audio_Fallback: ffac3
+language: English
+x264_Speed: slow
 
-Language = English
-Audio Fallback = ffac3
-Animation BFrames = 8"""
+[Base Encode Quality]
+1080p: 20
+720p: 20
+480p: 20
+
+[High Encode Quality]
+1080p: 19
+720p: 19
+480p: 19
+
+[Ultra Encode Quality]
+1080p: 16
+720p: 16
+480p: 16"""
+
+# Create a global lock
+gLock = Lock()
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -273,35 +282,40 @@ class Config(object):
 
     Sample config file:
 
-    Java = C:/Program Files (x86)/Java/jre7/bin/java
-    BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-    HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
-    mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
-    mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
+    [Programs]
+    BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+    HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+    Java: C://Program Files (x86)/Java/jre7/bin/java
+    mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+    mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-    x264 Speed = slow
-    Baseline Quality
-        1080p = 20
-        720p = 20
-        480p = 20
-    High Quality
-        1080p = 19
-        720p = 19
-        480p = 19
-    Ultra Quality
-        1080p = 16
-        720p = 16
-        480p = 16
+    [Handbrake Settings]
+    animation_BFrames: 8
+    audio_Fallback: ffac3
+    language: English
+    x264_Speed: slow
 
-    Language = English
-    Audio Fallback = ffac3
-    Animation BFrames = 8
+    [Base Encode Quality]
+    1080p: 20
+    720p: 20
+    480p: 20
+
+    [High Encode Quality]
+    1080p: 19
+    720p: 19
+    480p: 19
+
+    [Ultra Encode Quality]
+    1080p: 16
+    720p: 16
+    480p: 16
 
     Leading and trailing whitespaces are automatically removed, but all entries
-    are case sensitive. Make sure there's still a space between the argument
-    and the '=' sign.
+    are case sensitive.
 
     """
+
+    config = None
 
     java = ''
     sup2Sub = ''
@@ -315,118 +329,130 @@ class Config(object):
 
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
+    singleInstance = None
+
+    def __new__(cls, *args, **kwargs):
+        with gLock:
+            if cls.singleInstance is None:
+                cls.singleInstance = super(Config, cls).__new__(cls)
+
+            return cls.singleInstance
+
     def __init__(self, iniFile):
-        self.configExists = False
-        self.checkConfig(iniFile)
-        if self.configExists:
-            self.getSettings(iniFile)
+
+        # Don't reinitialize
+        if hasattr(self, '_init'):
+            return
+
+        self._init = True
+
+        # This will either return True or raise an exception
+        if self.checkConfig(iniFile):
+            try:
+                self.getSettings(iniFile)
+            except (ConfigParser.NoOptionError or
+                        ConfigParser.NoSectionError), ex:
+                # NoOptionError strings to:
+                # No option 'djkas' in section: 'Programs'
+                # NoSectionError strings to:
+                # No section: 'Programsss'
+                # Both are index 2
+                error = str(ex).split()[2].replace("'", '')
+
+                if ex.__class__ is ConfigParser.NoOptionError:
+                    exception = 'option'
+                    # We also want to add the section to option errors, so
+                    # we'll pull it from the last index.
+                    error += " from section: "
+                    error += str(ex).split()[-1].replace("'", '')
+                elif ex.__class__ is ConfigParser.NoSectionError:
+                    exception = 'section'
+
+                message = "Missing the ini {type}: {err}. Please fill the " \
+                          "missing options and retry.".format(
+                    type=exception,
+                    err=error,
+                )
+                raise ValueError(message)
 
     def checkConfig(self, iniFile):
-        """Checks that the iniFile provided actually exists. Creates if not."""
+        """Checks that the iniFile provided actually exists. Creates if not.
+
+        Args:
+            iniFile : (str)
+                Config File location
+
+        Raises:
+            IOError
+                Raised if config file is missing.
+
+        Returns:
+            If IOError not raised, that means a config file was found and this
+            will return True
+
+        """
         if os.path.exists(iniFile):
-            self.configExists = True
-            return
+            return True
         else:
             with open(iniFile, "w") as f:
                 f.write(SAMPLE_CONFIG)
-            print ""
-            print "PROCESS WILL FAIL"
-            print "You were missing the .ini file. I had to create one for you."
-            print "You'll find it in Ripmaster's folder, called Ripmaster.ini"
-            print "You need to specify the path for" + \
-                  " Java, BDSup2Sub and Handbrake.\n"
-            self.configExists = False
+            errorMsg = "\nPROCESS WILL FAIL\nYou were missing the .ini file. " \
+                       "I had to create one for you. You'll find it in " \
+                       "Ripmaster's folder, called Ripmaster.ini - You need " \
+                       "to specify the path for the various applications\n"
+            raise IOError(errorMsg)
 
-    def getSettings(self, iniFile):
+    def getSettings(cls, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
         print "Reading config from:", iniFile
-        print
 
         with open(iniFile, "r") as f:
-            # splitlines() will give us a list of each line.
-            lines = f.read().splitlines()
+            cls.config = ConfigParser.ConfigParser()
+            cls.config.readfp(f)
+            cf = cls.config
 
-            for i in range(len(lines)):
-                # Remove leading whitespace before comparing with startswith()
-                line = lines[i].lstrip()
-                if line.startswith('Java'):
-                    Config.java = _stripAndRemove(
-                        line, 'Java ='
-                    ).replace('\\', '/')
-                elif line.startswith('BDSupToSub'):
-                    Config.sup2Sub = _stripAndRemove(
-                        line, 'BDSupToSub ='
-                    ).replace('\\', '/')
-                elif line.startswith('HandbrakeCLI'):
-                    Config.handBrake = _stripAndRemove(
-                        line, 'HandbrakeCLI ='
-                    ).replace('\\', '/')
-                elif line.startswith('mkvMerge'):
-                    Config.mkvMerge = _stripAndRemove(
-                        line, 'mkvMerge ='
-                    ).replace('\\', '/')
-                elif line.startswith('mkvExtract'):
-                    Config.mkvExtract = _stripAndRemove(
-                        line, 'mkvExtract ='
-                    ).replace('\\', '/')
-                elif line.startswith('x264 Speed'):
-                    Config.x264Speed = _stripAndRemove(
-                        line, 'x264 Speed ='
-                    )
-                elif line.startswith('Audio Fallback ='):
-                    Config.audioFallback = _stripAndRemove(
-                        line, 'Audio Fallback ='
-                    )
-                elif line.startswith('Baseline Quality'):
-                    Config.quality['bq']['1080'] = int(_stripAndRemove(
-                        lines[i+1], '1080p =')
-                    )
-                    Config.quality['bq']['720'] = int(_stripAndRemove(
-                        lines[i+2], '720p =')
-                    )
-                    Config.quality['bq']['480'] = int(_stripAndRemove(
-                        lines[i+3], '480p =')
-                    )
-                elif line.startswith('High Quality'):
-                    Config.quality['hq']['1080'] = int(_stripAndRemove(
-                        lines[i+1], '1080p =')
-                    )
-                    Config.quality['hq']['720'] = int(_stripAndRemove(
-                        lines[i+2], '720p =')
-                    )
-                    Config.quality['hq']['480'] = int(_stripAndRemove(
-                        lines[i+3], '480p =')
-                    )
-                elif line.startswith('Ultra Quality'):
-                    Config.quality['uq']['1080'] = int(_stripAndRemove(
-                        lines[i+1], '1080p =')
-                    )
-                    Config.quality['uq']['720'] = int(_stripAndRemove(
-                        lines[i+2], '720p =')
-                    )
-                    Config.quality['uq']['480'] = int(_stripAndRemove(
-                        lines[i+3], '480p =')
-                    )
-                elif line.startswith('Language'):
-                    Config.language = _stripAndRemove(line, 'Language =')
-                elif line.startswith('Animation BFrames'):
-                    Config.bFrames = _stripAndRemove(
-                        line, 'Animation BFrames ='
-                    )
+            # Grab all of our 'Programs' settings
+            cat = 'Programs'
+            cls.sup2Sub = cf.get(cat, 'BDSupToSub')
+            cls.handBrake = cf.get(cat, 'HandbrakeCLI')
+            cls.java = cf.get(cat, 'Java')
+            cls.mkvExtract = cf.get(cat, 'mkvExtract')
+            cls.mkvMerge = cf.get(cat, 'mkvMerge')
 
-    def debug(self):
+            cat = 'Handbrake Settings'
+            cls.bFrames = cf.get(cat, 'animation_BFrames')
+            cls.audioFallback = cf.get(cat, 'audio_Fallback')
+            cls.language = cf.get(cat, 'language')
+            cls.x264Speed = cf.get(cat, 'x264_Speed')
+
+            qualityCats =  [
+                'Base Encode Quality',
+                'High Encode Quality',
+                'Ultra Encode Quality',
+            ]
+            qualityLevels = ['bq', 'hq', 'uq']
+            for i in xrange(3):
+                cat = qualityCats[i]
+                level = qualityLevels[i]
+                dict = cls.quality[level]
+
+                dict['1080'] = cf.getint(cat, '1080p')
+                dict['720'] = cf.getint(cat, '720p')
+                dict['480'] = cf.getint(cat, '480p')
+
+    def debug(cls):
         """Prints the current configuration"""
-        print "Java at:", Config.java
-        print "BDSup2Sub at:", Config.sup2Sub
-        print "Handbrake at:", Config.handBrake
-        print "mkvMerge at:", Config.mkvMerge
-        print "mkvExtract at:", Config.mkvExtract
-        print "x624speed set to:", Config.x264Speed
-        print "Default language:", Config.language
-        print "Audio Codec Fallback:", Config.audioFallback
+        print "Java at:", cls.java
+        print "BDSup2Sub at:", cls.sup2Sub
+        print "Handbrake at:", cls.handBrake
+        print "mkvMerge at:", cls.mkvMerge
+        print "mkvExtract at:", cls.mkvExtract
+        print "x624speed set to:", cls.x264Speed
+        print "Default language:", cls.language
+        print "Audio Codec Fallback:", cls.audioFallback
         print "Quality dictionary:"
-        for entry in Config.quality:
-            print entry + ":", Config.quality[entry]
+        for entry in cls.quality:
+            print entry + ":", cls.quality[entry]
 
 class Movie(object):
     """A movie file, with all video, audio and subtitle tracks

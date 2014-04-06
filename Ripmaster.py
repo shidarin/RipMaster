@@ -103,35 +103,38 @@ Sample Ripmaster.ini file:
 
 ================================================================================
 
-Java = C:/Program Files (x86)/Java/jre7/bin/java
-BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
-mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
-mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
+[Programs]
+BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+Java: C://Program Files (x86)/Java/jre7/bin/java
+mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-x264 Speed = slow
-Baseline Quality
-    1080p = 20
-    720p = 20
-    480p = 20
-High Quality
-    1080p = 19
-    720p = 19
-    480p = 19
-Ultra Quality
-    1080p = 16
-    720p = 16
-    480p = 16
+[Handbrake Settings]
+animation_BFrames: 8
+audio_Fallback: ffac3
+language: English
+x264_Speed: slow
 
-Language = English
-Audio Fallback = ffac3
-Animation BFrames = 8
+[Base Encode Quality]
+1080p: 20
+720p: 20
+480p: 20
+
+[High Encode Quality]
+1080p: 19
+720p: 19
+480p: 19
+
+[Ultra Encode Quality]
+1080p: 16
+720p: 16
+480p: 16
 
 ================================================================================
 
 Leading and trailing whitespaces are automatically removed, but all entries
-are case sensitive. Make sure there's still a space between the argument
-and the '=' sign.
+are case sensitive.
 
 Users need to Rip their own movies from disk, probably using MakeMKV, then
 they need to decide on how they want each movie processed, this is done by
@@ -268,8 +271,12 @@ def _get_movies(dir):
 def main():
     """Main app process. This controls every step of the process"""
     # TODO: Allow users to supply alt configs?
-    config = Config('./Ripmaster.ini')
-    if not config.configExists:
+    try:
+        config = Config('./Ripmaster.ini')
+    # IOError will raise if iniFile is not found. ValueError will raise if
+    # iniFile is missing options.
+    except (IOError or ValueError), ex:
+        print ex
         return
 
     config.debug()
