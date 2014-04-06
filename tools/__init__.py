@@ -65,6 +65,7 @@ mkvMerge()
 # Standard Imports
 from ast import literal_eval
 import ConfigParser
+from threading import Lock
 import os
 from subprocess import Popen, PIPE
 
@@ -126,6 +127,9 @@ x264_Speed: slow
 1080p: 16
 720p: 16
 480p: 16"""
+
+# Create a global lock
+gLock = Lock()
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -325,7 +329,23 @@ class Config(object):
 
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
+    singleInstance = None
+
+    def __new__(cls, **kwargs):
+        with gLock:
+            if cls.singleInstance is None:
+                cls.singleInstance = super(Config, cls).__new__(cls)
+
+            return cls.singleInstance
+
     def __init__(self, iniFile):
+
+        # Don't reinitialize
+        if hasattr(self, '_init'):
+            return
+
+        self._init = True
+
         # This will either return True or raise an exception
         if self.checkConfig(iniFile):
             try:
