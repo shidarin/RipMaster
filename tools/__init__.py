@@ -98,29 +98,33 @@ BFRAMES = {
     'veryslow': 8,
     'placebo': 16
 }
-SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
-BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
-mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
-mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
+SAMPLE_CONFIG = """[Programs]
+BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+Java: C://Program Files (x86)/Java/jre7/bin/java
+mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-x264 Speed = slow
-Baseline Quality
-    1080p = 20
-    720p = 20
-    480p = 20
-High Quality
-    1080p = 19
-    720p = 19
-    480p = 19
-Ultra Quality
-    1080p = 16
-    720p = 16
-    480p = 16
+[Handbrake Settings]
+animation_BFrames: 8
+audio_Fallback: ffac3
+language: English
+x264_Speed: slow
 
-Language = English
-Audio Fallback = ffac3
-Animation BFrames = 8"""
+[Base Encode Quality]
+1080p: 20
+720p: 20
+480p: 20
+
+[High Encode Quality]
+1080p: 19
+720p: 19
+480p: 19
+
+[Ultra Encode Quality]
+1080p: 16
+720p: 16
+480p: 16"""
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -273,33 +277,36 @@ class Config(object):
 
     Sample config file:
 
-    Java = C:/Program Files (x86)/Java/jre7/bin/java
-    BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-    HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
-    mkvMerge = C://Program Files (x86)/MKVToolNix/mkvmerge.exe
-    mkvExtract = C://Program Files (x86)/MKVToolNix/mkvextract.exe
+    [Programs]
+    BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+    HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+    Java: C://Program Files (x86)/Java/jre7/bin/java
+    mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+    mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-    x264 Speed = slow
-    Baseline Quality
-        1080p = 20
-        720p = 20
-        480p = 20
-    High Quality
-        1080p = 19
-        720p = 19
-        480p = 19
-    Ultra Quality
-        1080p = 16
-        720p = 16
-        480p = 16
+    [Handbrake Settings]
+    animation_BFrames: 8
+    audio_Fallback: ffac3
+    language: English
+    x264_Speed: slow
 
-    Language = English
-    Audio Fallback = ffac3
-    Animation BFrames = 8
+    [Base Encode Quality]
+    1080p: 20
+    720p: 20
+    480p: 20
+
+    [High Encode Quality]
+    1080p: 19
+    720p: 19
+    480p: 19
+
+    [Ultra Encode Quality]
+    1080p: 16
+    720p: 16
+    480p: 16
 
     Leading and trailing whitespaces are automatically removed, but all entries
-    are case sensitive. Make sure there's still a space between the argument
-    and the '=' sign.
+    are case sensitive.
 
     """
 
@@ -316,26 +323,36 @@ class Config(object):
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
     def __init__(self, iniFile):
-        self.configExists = False
-        self.checkConfig(iniFile)
-        if self.configExists:
+        # This will either return True or raise an exception
+        if self.checkConfig(iniFile):
             self.getSettings(iniFile)
 
     def checkConfig(self, iniFile):
-        """Checks that the iniFile provided actually exists. Creates if not."""
+        """Checks that the iniFile provided actually exists. Creates if not.
+
+        Args:
+            iniFile : (str)
+                Config File location
+
+        Raises:
+            IOError
+                Raised if config file is missing.
+
+        Returns:
+            If IOError not raised, that means a config file was found and this
+            will return True
+
+        """
         if os.path.exists(iniFile):
-            self.configExists = True
-            return
+            return True
         else:
             with open(iniFile, "w") as f:
                 f.write(SAMPLE_CONFIG)
-            print ""
-            print "PROCESS WILL FAIL"
-            print "You were missing the .ini file. I had to create one for you."
-            print "You'll find it in Ripmaster's folder, called Ripmaster.ini"
-            print "You need to specify the path for" + \
-                  " Java, BDSup2Sub and Handbrake.\n"
-            self.configExists = False
+            errorMsg = "\nPROCESS WILL FAIL\nYou were missing the .ini file. " \
+                       "I had to create one for you. You'll find it in " \
+                       "Ripmaster's folder, called Ripmaster.ini - You need " \
+                       "to specify the path for the various applications\n"
+            raise IOError(errorMsg)
 
     def getSettings(self, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
