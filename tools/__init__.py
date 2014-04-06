@@ -331,7 +331,7 @@ class Config(object):
 
     singleInstance = None
 
-    def __new__(cls, **kwargs):
+    def __new__(cls, *args, **kwargs):
         with gLock:
             if cls.singleInstance is None:
                 cls.singleInstance = super(Config, cls).__new__(cls)
@@ -405,7 +405,6 @@ class Config(object):
     def getSettings(cls, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
         print "Reading config from:", iniFile
-        print
 
         with open(iniFile, "r") as f:
             cls.config = ConfigParser.ConfigParser()
