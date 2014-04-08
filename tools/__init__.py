@@ -65,7 +65,6 @@ mkvMerge()
 # Standard Imports
 from ast import literal_eval
 import ConfigParser
-from threading import Lock
 import os
 from subprocess import Popen, PIPE
 
@@ -127,9 +126,6 @@ x264_Speed: slow
 1080p: 16
 720p: 16
 480p: 16"""
-
-# Create a global lock
-gLock = Lock()
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -329,23 +325,7 @@ class Config(object):
 
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
-    singleInstance = None
-
-    def __new__(cls, *args, **kwargs):
-        with gLock:
-            if cls.singleInstance is None:
-                cls.singleInstance = super(Config, cls).__new__(cls)
-
-            return cls.singleInstance
-
     def __init__(self, iniFile):
-
-        # Don't reinitialize
-        if hasattr(self, '_init'):
-            return
-
-        self._init = True
-
         # This will either return True or raise an exception
         if self.checkConfig(iniFile):
             try:
@@ -402,6 +382,7 @@ class Config(object):
                        "to specify the path for the various applications\n"
             raise IOError(errorMsg)
 
+    @classmethod
     def getSettings(cls, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
         print "Reading config from:", iniFile
@@ -440,6 +421,7 @@ class Config(object):
                 dict['720'] = cf.getint(cat, '720p')
                 dict['480'] = cf.getint(cat, '480p')
 
+    @classmethod
     def debug(cls):
         """Prints the current configuration"""
         print "Java at:", cls.java
@@ -1137,9 +1119,9 @@ def mkvmerge(command, dest):
     commands.append(dest)
     commands.extend(command)
 
-    print ""
+    print
     print commands
-    print ""
+    print
 
     from subprocess import check_call
     try:
