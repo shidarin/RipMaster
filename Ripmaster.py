@@ -397,7 +397,11 @@ def main():
     print ""
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception, err:
+        print err
+        raw_input('Press enter key to exit')
 
 # Keep the shell up to show results
 raw_input('\n\nTask complete. Press enter to close')

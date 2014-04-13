@@ -340,8 +340,8 @@ class Config(object):
         if self.checkConfig(iniFile):
             try:
                 self.getSettings(iniFile)
-            except (ConfigParser.NoOptionError or
-                        ConfigParser.NoSectionError), ex:
+            except (ConfigParser.NoOptionError,
+                    ConfigParser.NoSectionError), ex:
                 # NoOptionError strings to:
                 # No option 'djkas' in section: 'Programs'
                 # NoSectionError strings to:
@@ -437,7 +437,7 @@ class Config(object):
             # The reverse setting is also optional, but it needs to be a bool.
             try:
                 cls.sortingReverse = cf.getboolean(cat, 'sorting_Reverse')
-            except (ValueError or ConfigParser.NoOptionError):
+            except (ValueError, ConfigParser.NoOptionError):
                 # On either a bad value or a mission option, we'll just move
                 # along here.
                 pass
