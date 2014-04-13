@@ -276,6 +276,48 @@ def _get_movies(dir):
     return movieList
 
 #===============================================================================
+
+def _sort_movies(movies, qualDict, sorting, reverse):
+    """Sorts of the movies by quality, resolution or alphabetical
+
+    Args:
+        movies : [<Movie>]
+            List of movie objects to sort and return.
+
+        qualDict : {quality: {resolution: int}}
+            Quality dictionary to get rf value of conversion out of.
+
+        sorting : (str)
+            Type of sorting to use. Either 'quality', 'resolution' or
+            'alphabetical'. Any value other than quality of resolution will
+            also resolve to alphabetical.
+
+    Raises:
+        N/A
+
+    Returns:
+        [<Movie>]
+            Sorted Movie list.
+
+    """
+    if sorting == 'quality':
+        # We get the quality number by getting the config quality dictionary,
+        # using the quality setting from the key, then using the movie's
+        # resolution as the next key.
+        #
+        # For quality, we want inverse of the normal reverse setting, so that
+        # we encode from low quality to high by default (higher numbers to
+        # lower numbers)
+        movies.sort(key=lambda mv: qualDict[mv.quality][mv.resolution],
+                    reverse=not reverse)
+    elif sorting == 'resolution':
+        movies.sort(key=lambda mv: mv.resolution, reverse=reverse)
+    else:  # Alphabetical by directory name, which is the title.
+        movies.sort(key=lambda mv: mv.subdir, reverse=reverse)
+
+    return movies
+
+#===============================================================================
 # MAIN
 #===============================================================================
 
@@ -342,20 +384,8 @@ def main():
     movies.extend(newMovies)
 
     # Sort movies
-    if config.sorting == 'quality':
-        # We get the quality number by getting the config quality dictionary,
-        # using the quality setting from the key, then using the movie's
-        # resolution as the next key.
-        #
-        # For quality, we want inverse of the normal reverse setting, so that
-        # we encode from low quality to high by default (higher numbers to
-        # lower numbers)
-        movies.sort(key=lambda mv: config.quality[mv.quality][mv.resolution],
-                    reverse=not config.sortingReverse)
-    elif config.sorting == 'resolution':
-        movies.sort(key=lambda mv: mv.resolution, reverse=config.sortingReverse)
-    else:  # Alphabetical by directory name, which is the title.
-        movies.sort(key=lambda mv: mv.subdir, reverse=config.sortingReverse)
+    movies = _sort_movies(movies, config.quality,
+                          config.sorting, config.sortingReverse)
 
     print "Total movie list after adding new movies and sorting:"
     for entry in movies:
