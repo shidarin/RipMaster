@@ -291,18 +291,13 @@ def main():
 
     root = os.getcwd() + '/toConvert/'
 
-    # Only during the Handbrake encode is the main pickle file emptied.
-    # Try and load the main pickle file instead of the backup, in case it's
-    # not empty.
+    # See if we can load from the main file.
     try:
         with open("./movies.p", "rb") as f:
             movies = pickle.load(f)
     except (IOError, EOFError):
-        # See if we have a backup copy. Our backup copy is more likely to be
-        # complete than the master. See issue #23 on github
-        # http://github.com/shidarin/RipMaster/issues/23
-        print "Main movie list is bad (this happens if Ripmaster crashes " + \
-            "the encode stage. Loading from backup..."
+        # See if we have a backup copy.
+        print "No main movie file found. Loading from backup..."
         try:
             copyfile("./movies.p.bak", "./movies.p")
         except IOError:
