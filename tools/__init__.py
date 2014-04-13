@@ -111,6 +111,7 @@ animation_BFrames: 8
 audio_Fallback: ffac3
 language: English
 sorting: alphabetical
+sorting_Reverse: no
 x264_Speed: slow
 
 [Base Encode Quality]
@@ -291,6 +292,7 @@ class Config(object):
     audio_Fallback: ffac3
     language: English
     sorting: alphabetical
+    sorting_Reverse: no
     x264_Speed: slow
 
     [Base Encode Quality]
@@ -327,6 +329,7 @@ class Config(object):
     audioFallback = 'ffac3'
     language = 'English'
     sorting = 'alphabetical'
+    sortingReverse = False
     x264Speed = 'slow'
 
     # Encode Qualities
@@ -431,6 +434,13 @@ class Config(object):
                     clsVars[i] = cf.get(cat, settings[i])
                 except ConfigParser.NoOptionError:
                     continue
+            # The reverse setting is also optional, but it needs to be a bool.
+            try:
+                cls.sortingReverse = cf.getboolean(cat, 'sorting_Reverse')
+            except (ValueError or ConfigParser.NoOptionError):
+                # On either a bad value or a mission option, we'll just move
+                # along here.
+                pass
 
             qualityCats =  [
                 'Base Encode Quality',
