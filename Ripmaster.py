@@ -102,8 +102,11 @@ If you want to adjust the movie order, you can change the sorting setting.
 Options for sorting are:
 
     alphabetical (default)
-    resolution
-    quality
+    resolution (lowest res to highest)
+    quality (lowest quality to highest)
+
+You can also set the sorting to be reverse sorting with the sorting_Reverse
+setting.
 
 Sample Ripmaster.ini file:
 
@@ -121,6 +124,7 @@ animation_BFrames: 8
 audio_Fallback: ffac3
 language: English
 sorting: alphabetical
+sorting_Reverse: no
 x264_Speed: slow
 
 [Base Encode Quality]
@@ -337,7 +341,23 @@ def main():
     # objects by the new movies found.
     movies.extend(newMovies)
 
-    print "Total movie list after adding new movies:"
+    # Sort movies
+    if config.sorting == 'quality':
+        # We get the quality number by getting the config quality dictionary,
+        # using the quality setting from the key, then using the movie's
+        # resolution as the next key.
+        #
+        # For quality, we want inverse of the normal reverse setting, so that
+        # we encode from low quality to high by default (higher numbers to
+        # lower numbers)
+        movies.sort(key=lambda mv: config.quality[mv.quality][mv.resolution],
+                    reverse=not config.sortingReverse)
+    elif config.sorting == 'resolution':
+        movies.sort(key=lambda mv: mv.resolution, reverse=config.sortingReverse)
+    else:  # Alphabetical by directory name, which is the title.
+        movies.sort(key=lambda mv: mv.subdir, reverse=config.sortingReverse)
+
+    print "Total movie list after adding new movies and sorting:"
     for entry in movies:
         print entry.path
 
