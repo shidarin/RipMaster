@@ -66,14 +66,14 @@ HandBrakeCLI.
 
 Users should also set their desired x264 speed, available options are:
 
-    ultrafast,
-    superfast,
-    veryfast,
-    faster,
-    fast,
-    medium,
-    slow,
-    slower,
+    ultrafast
+    superfast
+    veryfast
+    faster
+    fast
+    medium
+    slow (default)
+    slower
     veryslow
 
 Default: slow
@@ -83,14 +83,12 @@ Options for fallback audio are:
 
     faac
     ffaac
-    ffac3
+    ffac3 (default)
     lame
     vorbis
     ffflac
 
 But note that not all of these support full surround sound.
-
-Default: ffac3
 
 If you want to specify additional BFrames to be used with the 'animation' x264
 tuning, set that with the Animation BFrames setting. If not present, only the
@@ -98,6 +96,14 @@ BFrames specified by the speed preset and tune will be used. This will be in
 addition to the BFrames set by the speed preset, but will override the tune.
 
 Default: None
+
+If you want to adjust the movie order, you can change the sorting setting.
+
+Options for sorting are:
+
+    alphabetical (default)
+    resolution
+    quality
 
 Sample Ripmaster.ini file:
 
@@ -114,6 +120,7 @@ mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 animation_BFrames: 8
 audio_Fallback: ffac3
 language: English
+sorting: alphabetical
 x264_Speed: slow
 
 [Base Encode Quality]

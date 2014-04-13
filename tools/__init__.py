@@ -110,6 +110,7 @@ mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 animation_BFrames: 8
 audio_Fallback: ffac3
 language: English
+sorting: alphabetical
 x264_Speed: slow
 
 [Base Encode Quality]
@@ -289,6 +290,7 @@ class Config(object):
     animation_BFrames: 8
     audio_Fallback: ffac3
     language: English
+    sorting: alphabetical
     x264_Speed: slow
 
     [Base Encode Quality]
@@ -313,16 +315,21 @@ class Config(object):
 
     config = None
 
-    java = ''
-    sup2Sub = ''
+    # Programs
     handBrake = ''
-    mkvMerge = ''
+    java = ''
     mkvExtract = ''
-    x264Speed = 'slow'
-    language = 'English'
-    audioFallback = 'ffac3'
-    bFrames = None
+    mkvMerge = ''
+    sup2Sub = ''
 
+    # Handbrake Settings
+    bFrames = None
+    audioFallback = 'ffac3'
+    language = 'English'
+    sorting = 'alphabetical'
+    x264Speed = 'slow'
+
+    # Encode Qualities
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
     def __init__(self, iniFile):
@@ -401,10 +408,29 @@ class Config(object):
             cls.mkvMerge = cf.get(cat, 'mkvMerge')
 
             cat = 'Handbrake Settings'
-            cls.bFrames = cf.get(cat, 'animation_BFrames')
-            cls.audioFallback = cf.get(cat, 'audio_Fallback')
-            cls.language = cf.get(cat, 'language')
-            cls.x264Speed = cf.get(cat, 'x264_Speed')
+            # For Handbrake settings we need to do a try/except around each
+            # variable, so we'll make a list and iterate over it.
+            clsVars = [
+                cls.bFrames,
+                cls.audioFallback,
+                cls.language,
+                cls.sorting,
+                cls.x264Speed
+            ]
+            settings = [
+                'animation_BFrames',
+                'audio_Fallback',
+                'language',
+                'sorting',
+                'x264_Speed'
+            ]
+            for i in xrange(len(clsVars)):
+                # All the Handbrake settings are optional, so if the settings
+                # aren't found we just leave it at the default.
+                try:
+                    clsVars[i] = cf.get(cat, settings[i])
+                except ConfigParser.NoOptionError:
+                    continue
 
             qualityCats =  [
                 'Base Encode Quality',
