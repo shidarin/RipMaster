@@ -72,6 +72,14 @@ from subprocess import Popen, PIPE
 # GLOBALS
 #===============================================================================
 
+AUDIO_FALLBACKS = [
+    'faac',
+    'ffaac',
+    'ffac3',
+    'lame',
+    'vorbis',
+    'ffflac',
+    ]
 RESOLUTIONS = [1080, 720, 480]
 RESOLUTION_WIDTH = {1080: 1920, 720: 1280, 480: 720}
 QUALITY = ['uq', 'hq', 'bq']
@@ -410,38 +418,81 @@ class Config(object):
             cls.mkvExtract = cf.get(cat, 'mkvExtract')
             cls.mkvMerge = cf.get(cat, 'mkvMerge')
 
-            cat = 'Handbrake Settings'
-            # For Handbrake settings we need to do a try/except around each
-            # variable, so we'll make a list and iterate over it.
-            clsVars = [
-                cls.bFrames,
-                cls.audioFallback,
-                cls.language,
-                cls.sorting,
-                cls.x264Speed
-            ]
-            settings = [
-                'animation_BFrames',
-                'audio_Fallback',
-                'language',
-                'sorting',
-                'x264_Speed'
-            ]
-            for i in xrange(len(clsVars)):
-                # All the Handbrake settings are optional, so if the settings
-                # aren't found we just leave it at the default.
-                try:
-                    clsVars[i] = cf.get(cat, settings[i])
-                except ConfigParser.NoOptionError:
-                    continue
-            # The reverse setting is also optional, but it needs to be a bool.
-            try:
-                cls.sortingReverse = cf.getboolean(cat, 'sorting_Reverse')
-            except (ValueError, ConfigParser.NoOptionError):
-                # On either a bad value or a mission option, we'll just move
-                # along here.
-                pass
+            def optionalGet(category, option, default, allowed=None, type=str):
+                """Returns provided default if option not found
 
+                Args:
+                    category : (str)
+                        The settings category to search in
+
+                    option : (str)
+                        The option to search for
+
+                    default : (str|int|bool)
+                        The default value to return if bad/no value found
+
+                    allowed=None : [str|int]
+                        If given, only values found in this list will be
+                        accepted
+
+                    type=str : (<str>|<int>|<bool>)
+                        The type of input we're looking for. Will use a
+                        different get method for each.
+
+                Raises:
+                    N/A
+
+                Returns:
+                    (str|int|bool)
+                        The result found in the config file, or the default if
+                        that isn't found/isn't in the allowed list."""
+                if type == str:
+                    get = cf.get
+                elif type == int:
+                    get = cf.getint
+                elif type == bool:
+                    get = cf.getboolean
+
+                try:
+                    result = get(category, option)
+                except (
+                    ConfigParser.NoOptionError,
+                    ConfigParser.NoSectionError,
+                    ValueError
+                ):
+                    return default
+
+                if allowed and result not in allowed:
+                    return default
+                else:
+                    return result
+
+            cat = 'Handbrake Settings'
+            # All the Handbrake settings are optional, so if the settings
+            # aren't found we just leave it at the default.
+            cls.bFrames = optionalGet(
+                cat, 'animation_BFrames', cls.bFrames, type=int
+            )
+            cls.audioFallback = optionalGet(
+                cat, 'audio_Fallback', cls.audioFallback,
+                allowed=AUDIO_FALLBACKS
+            )
+            cls.language = optionalGet(
+                cat, 'language', cls.language, allowed=['English']
+            )
+            cls.sorting = optionalGet(
+                cat, 'sorting', cls.sorting, allowed=[
+                    'alphabetical', 'quality', 'resolution'
+                ]
+            )
+            cls.sortingReverse = optionalGet(
+                cat, 'sorting_Reverse', cls.sortingReverse, type=bool
+            )
+            cls.x264Speed = optionalGet(
+                cat, 'x264_Speed', cls.x264Speed, allowed=BFRAMES
+            )
+
+            # Quality catagories are also optional, defaulting to 20.
             qualityCats =  [
                 'Base Encode Quality',
                 'High Encode Quality',
@@ -453,9 +504,9 @@ class Config(object):
                 level = qualityLevels[i]
                 dict = cls.quality[level]
 
-                dict['1080'] = cf.getint(cat, '1080p')
-                dict['720'] = cf.getint(cat, '720p')
-                dict['480'] = cf.getint(cat, '480p')
+                dict['1080'] = optionalGet(cat, '1080p', 20, type=int)
+                dict['720'] = optionalGet(cat, '720p', 20, type=int)
+                dict['480'] = optionalGet(cat, '480p', 20, type=int)
 
     @classmethod
     def debug(cls):
@@ -468,6 +519,8 @@ class Config(object):
         print "x624speed set to:", cls.x264Speed
         print "Default language:", cls.language
         print "Audio Codec Fallback:", cls.audioFallback
+        print "Sorting is set to:", cls.sorting
+        print "Sorting reverse is:", cls.sortingReverse
         print "Quality dictionary:"
         for entry in cls.quality:
             print entry + ":", cls.quality[entry]
@@ -560,6 +613,11 @@ class Movie(object):
                 if self.resolution:
                     self.quality = Config.quality[level][str(self.resolution)]
                 else:
+                    # This may seem odd- we set the quality to a provided string
+                    # instead of the int stored in the quality dictionary, but
+                    # we have no way of getting that int from the quality dict
+                    # without a provided resolution. Since we have no res, we
+                    # have to wait until we derive the resolution manually.
                     self.quality = level
         for preset in H264_PRESETS:
             if preset in instructionSet:
