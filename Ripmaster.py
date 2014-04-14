@@ -277,7 +277,7 @@ def _get_movies(dir):
 
 #===============================================================================
 
-def _sort_movies(movies, qualDict, sorting, reverse):
+def _sort_movies(movies, sorting, reverse):
     """Sorts of the movies by quality, resolution or alphabetical
 
     Args:
@@ -308,8 +308,7 @@ def _sort_movies(movies, qualDict, sorting, reverse):
         # For quality, we want inverse of the normal reverse setting, so that
         # we encode from low quality to high by default (higher numbers to
         # lower numbers)
-        movies.sort(key=lambda mv: qualDict[mv.quality][mv.resolution],
-                    reverse=not reverse)
+        movies.sort(key=lambda mv: mv.quality, reverse=not reverse)
     elif sorting == 'resolution':
         movies.sort(key=lambda mv: mv.resolution, reverse=reverse)
     else:  # Alphabetical by directory name, which is the title.
@@ -384,8 +383,7 @@ def main():
     movies.extend(newMovies)
 
     # Sort movies
-    movies = _sort_movies(movies, config.quality,
-                          config.sorting, config.sortingReverse)
+    movies = _sort_movies(movies, config.sorting, config.sortingReverse)
 
     print "Total movie list after adding new movies and sorting:"
     for entry in movies:
