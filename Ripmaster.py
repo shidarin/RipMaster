@@ -66,14 +66,14 @@ HandBrakeCLI.
 
 Users should also set their desired x264 speed, available options are:
 
-    ultrafast,
-    superfast,
-    veryfast,
-    faster,
-    fast,
-    medium,
-    slow,
-    slower,
+    ultrafast
+    superfast
+    veryfast
+    faster
+    fast
+    medium
+    slow (default)
+    slower
     veryslow
 
 Default: slow
@@ -83,14 +83,12 @@ Options for fallback audio are:
 
     faac
     ffaac
-    ffac3
+    ffac3 (default)
     lame
     vorbis
     ffflac
 
 But note that not all of these support full surround sound.
-
-Default: ffac3
 
 If you want to specify additional BFrames to be used with the 'animation' x264
 tuning, set that with the Animation BFrames setting. If not present, only the
@@ -98,6 +96,17 @@ BFrames specified by the speed preset and tune will be used. This will be in
 addition to the BFrames set by the speed preset, but will override the tune.
 
 Default: None
+
+If you want to adjust the movie order, you can change the sorting setting.
+
+Options for sorting are:
+
+    alphabetical (default)
+    resolution (lowest res to highest)
+    quality (lowest quality to highest)
+
+You can also set the sorting to be reverse sorting with the sorting_Reverse
+setting.
 
 Sample Ripmaster.ini file:
 
@@ -114,6 +123,8 @@ mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 animation_BFrames: 8
 audio_Fallback: ffac3
 language: English
+sorting: alphabetical
+sorting_Reverse: no
 x264_Speed: slow
 
 [Base Encode Quality]
@@ -265,6 +276,47 @@ def _get_movies(dir):
     return movieList
 
 #===============================================================================
+
+def _sort_movies(movies, sorting, reverse):
+    """Sorts of the movies by quality, resolution or alphabetical
+
+    Args:
+        movies : [<Movie>]
+            List of movie objects to sort and return.
+
+        qualDict : {quality: {resolution: int}}
+            Quality dictionary to get rf value of conversion out of.
+
+        sorting : (str)
+            Type of sorting to use. Either 'quality', 'resolution' or
+            'alphabetical'. Any value other than quality of resolution will
+            also resolve to alphabetical.
+
+    Raises:
+        N/A
+
+    Returns:
+        [<Movie>]
+            Sorted Movie list.
+
+    """
+    if sorting == 'quality':
+        # We get the quality number by getting the config quality dictionary,
+        # using the quality setting from the key, then using the movie's
+        # resolution as the next key.
+        #
+        # For quality, we want inverse of the normal reverse setting, so that
+        # we encode from low quality to high by default (higher numbers to
+        # lower numbers)
+        movies.sort(key=lambda mv: mv.quality, reverse=not reverse)
+    elif sorting == 'resolution':
+        movies.sort(key=lambda mv: mv.resolution, reverse=reverse)
+    else:  # Alphabetical by directory name, which is the title.
+        movies.sort(key=lambda mv: mv.subdir, reverse=reverse)
+
+    return movies
+
+#===============================================================================
 # MAIN
 #===============================================================================
 
@@ -284,18 +336,13 @@ def main():
 
     root = os.getcwd() + '/toConvert/'
 
-    # Only during the Handbrake encode is the main pickle file emptied.
-    # Try and load the main pickle file instead of the backup, in case it's
-    # not empty.
+    # See if we can load from the main file.
     try:
         with open("./movies.p", "rb") as f:
             movies = pickle.load(f)
     except (IOError, EOFError):
-        # See if we have a backup copy. Our backup copy is more likely to be
-        # complete than the master. See issue #23 on github
-        # http://github.com/shidarin/RipMaster/issues/23
-        print "Main movie list is bad (this happens if Ripmaster crashes " + \
-            "the encode stage. Loading from backup..."
+        # See if we have a backup copy.
+        print "No main movie file found. Loading from backup..."
         try:
             copyfile("./movies.p.bak", "./movies.p")
         except IOError:
@@ -335,7 +382,10 @@ def main():
     # objects by the new movies found.
     movies.extend(newMovies)
 
-    print "Total movie list after adding new movies:"
+    # Sort movies
+    movies = _sort_movies(movies, config.sorting, config.sortingReverse)
+
+    print "Total movie list after adding new movies and sorting:"
     for entry in movies:
         print entry.path
 
@@ -375,7 +425,11 @@ def main():
     print ""
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception, err:
+        print err
+        raw_input('Press enter key to exit')
 
 # Keep the shell up to show results
 raw_input('\n\nTask complete. Press enter to close')
