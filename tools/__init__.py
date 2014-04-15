@@ -72,29 +72,7 @@ from subprocess import Popen, PIPE
 # GLOBALS
 #===============================================================================
 
-AUDIO_FALLBACKS = [
-    'faac',
-    'ffaac',
-    'ffac3',
-    'lame',
-    'vorbis',
-    'ffflac',
-    ]
-RESOLUTIONS = [1080, 720, 480]
-RESOLUTION_WIDTH = {1080: 1920, 720: 1280, 480: 720}
-QUALITY = ['uq', 'hq', 'bq']
-H264_PRESETS = [
-    'animation',
-    'film',
-    'grain',
-    'psnr',
-    'ssim',
-    'fastdecode',
-    'zerolatency'
-]
-FPS_PRESETS = ['30p', '25p', '24p']
-EXTRACTABLE_AUDIO = ['pcm', 'truehd']
-EXTRACTABLE_SUBTITLE = ['pgs']
+# Conversion Dictionaries
 BFRAMES = {
     'ultrafast': 0,
     'superfast': 3,
@@ -107,6 +85,45 @@ BFRAMES = {
     'veryslow': 8,
     'placebo': 16
 }
+
+# Possible Config Choices
+AUDIO_FALLBACK_DEFAULT = 'ffac3'
+AUDIO_FALLBACKS = [
+    'faac',
+    'ffaac',
+    'ffac3',
+    'lame',
+    'vorbis',
+    'ffflac',
+    ]
+LANGUAGE_DEFAULT = 'English'
+LANGUAGES = ['English']
+SORTING_DEFAULT = 'alphabetical'
+SORTINGS = ['alphabetical', 'quality', 'resolution']
+SORTING_REVERSE_DEFAULT = True
+RESOLUTION_DEFAULT = 1080
+RESOLUTIONS = [1080, 720, 480]
+RESOLUTION_WIDTH = {1080: 1920, 720: 1280, 480: 720}
+QUALITY_DEFAULT = 20
+QUALITIES = ['uq', 'hq', 'bq']
+X264_SPEED_DEFAULT = 'slow'
+X264_SPEEDS = BFRAMES.keys()
+
+# Handbrake Settings
+H264_PRESETS = [
+    'animation',
+    'film',
+    'grain',
+    'psnr',
+    'ssim',
+    'fastdecode',
+    'zerolatency'
+]
+FPS_PRESETS = ['30p', '25p', '24p']
+EXTRACTABLE_AUDIO = ['pcm', 'truehd']
+EXTRACTABLE_SUBTITLE = ['pgs']
+
+# Generic
 SAMPLE_CONFIG = """[Programs]
 BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
 HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
@@ -334,11 +351,11 @@ class Config(object):
 
     # Handbrake Settings
     bFrames = None
-    audioFallback = 'ffac3'
-    language = 'English'
-    sorting = 'alphabetical'
-    sortingReverse = False
-    x264Speed = 'slow'
+    audioFallback = AUDIO_FALLBACK_DEFAULT
+    language = LANGUAGE_DEFAULT
+    sorting = SORTING_DEFAULT
+    sortingReverse = SORTING_REVERSE_DEFAULT
+    x264Speed = X264_SPEED_DEFAULT
 
     # Encode Qualities
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
@@ -369,7 +386,7 @@ class Config(object):
                 message = "Missing the ini {type}: {err}. Please fill the " \
                           "missing options and retry.".format(
                     type=exception,
-                    err=error,
+                    err=error
                 )
                 raise ValueError(message)
 
@@ -417,6 +434,21 @@ class Config(object):
             cls.java = cf.get(cat, 'Java')
             cls.mkvExtract = cf.get(cat, 'mkvExtract')
             cls.mkvMerge = cf.get(cat, 'mkvMerge')
+
+            # Enforce non-blank options
+            programOptions = {
+                'BDSupToSub': cls.sup2Sub,
+                'HandbrakeCLI': cls.handBrake,
+                'Java': cls.java,
+                'mkvExtract': cls.mkvExtract,
+                'mkvMerge': cls.mkvMerge
+            }
+            for option in programOptions:
+                if not programOptions[option]:
+                    raise ConfigParser.NoOptionError(
+                        programOptions[option],
+                        'Programs'
+                    )
 
             def optionalGet(category, option, default, allowed=None, type=str):
                 """Returns provided default if option not found
@@ -471,25 +503,23 @@ class Config(object):
             # All the Handbrake settings are optional, so if the settings
             # aren't found we just leave it at the default.
             cls.bFrames = optionalGet(
-                cat, 'animation_BFrames', cls.bFrames, type=int
+                cat, 'animation_BFrames', None, type=int
             )
             cls.audioFallback = optionalGet(
-                cat, 'audio_Fallback', cls.audioFallback,
+                cat, 'audio_Fallback', AUDIO_FALLBACK_DEFAULT,
                 allowed=AUDIO_FALLBACKS
             )
             cls.language = optionalGet(
-                cat, 'language', cls.language, allowed=['English']
+                cat, 'language', LANGUAGE_DEFAULT, allowed=LANGUAGES
             )
             cls.sorting = optionalGet(
-                cat, 'sorting', cls.sorting, allowed=[
-                    'alphabetical', 'quality', 'resolution'
-                ]
+                cat, 'sorting', SORTING_DEFAULT, allowed=SORTINGS
             )
             cls.sortingReverse = optionalGet(
-                cat, 'sorting_Reverse', cls.sortingReverse, type=bool
+                cat, 'sorting_Reverse', SORTING_REVERSE_DEFAULT, type=bool
             )
             cls.x264Speed = optionalGet(
-                cat, 'x264_Speed', cls.x264Speed, allowed=BFRAMES
+                cat, 'x264_Speed', X264_SPEED_DEFAULT, allowed=X264_SPEEDS
             )
 
             # Quality catagories are also optional, defaulting to 20.
@@ -507,23 +537,6 @@ class Config(object):
                 dict['1080'] = optionalGet(cat, '1080p', 20, type=int)
                 dict['720'] = optionalGet(cat, '720p', 20, type=int)
                 dict['480'] = optionalGet(cat, '480p', 20, type=int)
-
-    @classmethod
-    def debug(cls):
-        """Prints the current configuration"""
-        print "Java at:", cls.java
-        print "BDSup2Sub at:", cls.sup2Sub
-        print "Handbrake at:", cls.handBrake
-        print "mkvMerge at:", cls.mkvMerge
-        print "mkvExtract at:", cls.mkvExtract
-        print "x624speed set to:", cls.x264Speed
-        print "Default language:", cls.language
-        print "Audio Codec Fallback:", cls.audioFallback
-        print "Sorting is set to:", cls.sorting
-        print "Sorting reverse is:", cls.sortingReverse
-        print "Quality dictionary:"
-        for entry in cls.quality:
-            print entry + ":", cls.quality[entry]
 
 class Movie(object):
     """A movie file, with all video, audio and subtitle tracks
@@ -587,7 +600,7 @@ class Movie(object):
         # quality if it wasn't provided.
         # If our self.quality is in the QUALITY list, it hasn't been set to a
         # numerical quantity yet.
-        if self.quality in QUALITY:
+        if self.quality in QUALITIES:
             self.quality = Config.quality[self.quality][str(self.resolution)]
 
         # Progress
@@ -608,7 +621,7 @@ class Movie(object):
         for size in RESOLUTIONS:
             if str(size) in instructionSet:
                 self.resolution = size
-        for level in QUALITY:
+        for level in QUALITIES:
             if level in instructionSet:
                 if self.resolution:
                     self.quality = Config.quality[level][str(self.resolution)]
