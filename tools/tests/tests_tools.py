@@ -18,6 +18,7 @@ mock
 import os
 import mock
 from StringIO import StringIO
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -42,6 +43,8 @@ import tools
 #===============================================================================
 # GLOBALS
 #===============================================================================
+
+# Config =======================================================================
 
 CONFIG_STRUCTURE = """[Programs]
 BDSupToSub: {sup2Sub}
@@ -104,9 +107,428 @@ x264_Speed: slow
 720p: 16
 480p: 16"""
 
+# mkvInfo() ====================================================================
+
+# Most of these are from http://www.auby.no/files/video_tests/
+# Which has a collection of mkv files with settings noted.
+# Up is a recompress of a bluray rip
+
+# Direct bluray remux
+# Planet Earth 'Fresh Water' clip
+# No audio or subtitles
+MKVINFO_BIRDS = """File '/Users/sean/Downloads/birds.mkv': container: Matroska [duration:23064745313 is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:1 codec_id:V_MPEG4/ISO/AVC codec_private_length:40 codec_private_data:01640029ffe1001967640029ac34e501e0087b0110001974f004c4b408f183196001000468eebcb0 language:eng pixel_dimensions:1920x1072 display_dimensions:1920x1072 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:41708400]
+"""
+# Horribly low video bitrate, mostly interesting for the double audio tracks
+# Harry Potter 4?
+# No subtitles
+MKVINFO_HARRY_POTTER = """File '/Users/sean/Downloads/harrypotter.mkv': container: Matroska [title:Harry\sPotter\s4[Eng-Hindi]Dual.Audio\sBRRIP\s720p-=[champ_is_here]=- duration:57605000000 segment_uid:ad577ea53da9f80b8647220b4c737914 is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:576199555 codec_id:V_MPEG4/ISO/AVC codec_private_length:41 codec_private_data:0164001fffe100196764001fac34e6014010ec04400065d3c01312d023c60c668001000568eeb2c8b0 language:eng track_name:-=[champ_is_here]=- pixel_dimensions:1280x528 display_dimensions:1280x528 default_track:0 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:40001876 content_encoding_algorithms:3]
+Track ID 1: audio (A_AAC) [number:2 uid:925045919 codec_id:A_AAC codec_private_length:7 codec_private_data:131056e59d4800 language:eng track_name:-=[champ_is_here]=- default_track:0 forced_track:0 enabled_track:1 default_duration:42666666 audio_sampling_frequency:24000 audio_channels:2]
+Track ID 2: audio (A_MPEG/L3) [number:3 uid:3085470903 codec_id:A_MPEG/L3 codec_private_length:0 language:hin track_name:-=[champ_is_here]=- default_track:0 forced_track:0 enabled_track:1 default_duration:24000000 audio_sampling_frequency:48000 audio_channels:2 content_encoding_algorithms:3]
+"""
+
+# Direct hddvd remux
+# HDDVD Sampler Trailer
+MKVINFO_HDDVD = """File '/Users/sean/Downloads/hddvd.mkv': container: Matroska [duration:121897000000 segment_uid:987a9f2ff86231d08e8e7b04974f51d7 is_providing_timecodes:1]
+Track ID 0: video (V_MS/VFW/FOURCC, WVC1) [number:1 uid:1 codec_id:V_MS/VFW/FOURCC codec_private_length:77 codec_private_data:4d000000800700003804000001001800575643310000000001000000010000000000000000000000240000010fdbfe3bf21bca3bf886f180ca02020309a5b8d707fc0000010e5ac7fcefc86c40 language:eng track_name:1080p\sVC-1 pixel_dimensions:1920x1080 display_dimensions:1920x1080 default_track:1 forced_track:0 enabled_track:1]
+Track ID 1: audio (A_AC3) [number:2 uid:418009001 codec_id:A_AC3 codec_private_length:0 language:eng track_name:Dolby\sDigital\s2.0\s640kbps default_track:1 forced_track:0 enabled_track:1 default_duration:32000000 audio_sampling_frequency:48000 audio_channels:2]
+Track ID 2: audio (A_EAC3) [number:3 uid:2 codec_id:A_EAC3 codec_private_length:0 language:eng track_name:Dolby\sDigital\sPlus\s5.1\s640kbps default_track:0 forced_track:0 enabled_track:1 audio_sampling_frequency:48000 audio_channels:6]
+"""
+
+# Good ol' xvid with slightly newer aac
+# Matrix 2 Trailer
+# codec_private_data has been truncated for Matrix subtitles
+MKVINFO_MATRIX = """File '/Users/sean/Downloads/matrix.mkv': container: Matroska [duration:151458000000 segment_uid:b1a7f34114a6037281d087758c7756bb is_providing_timecodes:1]
+Track ID 0: video (V_MS/VFW/FOURCC, XVID) [number:1 uid:2738550924 codec_id:V_MS/VFW/FOURCC codec_private_length:40 codec_private_data:28000000800200005a01000001000c00585649440046140000000000000000000000000000000000 language:eng track_name:Matrix\sReloaded\sTrailer\sXviD\s1.0\sBeta1 pixel_dimensions:640x346 display_dimensions:640x346 default_track:0 forced_track:0 enabled_track:1 default_duration:41666663]
+Track ID 1: audio (A_AAC) [number:2 uid:1982383230 codec_id:A_AAC codec_private_length:5 codec_private_data:139056e5a0 language:eng track_name:HE-AAC\s50-70 default_track:0 forced_track:0 enabled_track:1 default_duration:46439909 audio_sampling_frequency:22050 audio_channels:2]
+Track ID 2: subtitles (S_TEXT/UTF8) [number:3 uid:3270128816 codec_id:S_TEXT/UTF8 codec_private_length:0 language:ara track_name:Arabic default_track:0 forced_track:0 enabled_track:1]
+Track ID 3: subtitles (S_TEXT/SSA) [number:4 uid:3563875756 codec_id:S_TEXT/SSA codec_private_length:796 codec_private_data:5b536hjkj language:cat track_name:Catalan default_track:0 forced_track:0 enabled_track:1]
+Track ID 4: subtitles (S_TEXT/SSA) [number:5 uid:2003350774 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:dut track_name:Dutch default_track:0 forced_track:0 enabled_track:1]
+Track ID 5: subtitles (S_TEXT/SSA) [number:6 uid:2619120828 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:eng track_name:English default_track:0 forced_track:0 enabled_track:1]
+Track ID 6: subtitles (S_TEXT/SSA) [number:7 uid:2674700248 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:fin track_name:Finnish default_track:0 forced_track:0 enabled_track:1]
+Track ID 7: subtitles (S_TEXT/SSA) [number:8 uid:1203285810 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:fre track_name:French default_track:0 forced_track:0 enabled_track:1]
+Track ID 8: subtitles (S_TEXT/SSA) [number:9 uid:1639611508 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:ger track_name:German default_track:0 forced_track:0 enabled_track:1]
+Track ID 9: subtitles (S_TEXT/UTF8) [number:10 uid:3466603604 codec_id:S_TEXT/UTF8 codec_private_length:0 language:jpn track_name:Japanese default_track:0 forced_track:0 enabled_track:1]
+Track ID 10: subtitles (S_TEXT/SSA) [number:11 uid:3705802066 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:por track_name:Portuguese default_track:0 forced_track:0 enabled_track:1]
+Track ID 11: subtitles (S_TEXT/SSA) [number:12 uid:301356576 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:slv track_name:Slovenian default_track:0 forced_track:0 enabled_track:1]
+Track ID 12: subtitles (S_TEXT/SSA) [number:13 uid:995510696 codec_id:S_TEXT/SSA codec_private_length:783 codec_private_data:5b5363726 language:spa track_name:Spanish default_track:0 forced_track:0 enabled_track:1]
+Attachment ID 1: type 'image/jpeg', size 50436 bytes, description 'Cover', file name 'reloaded.jpg'
+"""
+
+# Typical recompressed 1080p
+# Monster's Inc
+# Unstyled Subs
+MKVINFO_MONSTERS = """File '/Users/sean/Downloads/monsters.mkv': container: Matroska [duration:60146000000 segment_uid:a2aa8aa73f85cd5eb3fef28b9cfa9dec is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:1 codec_id:V_MPEG4/ISO/AVC codec_private_length:42 codec_private_data:01640029ffe1001a67640029ac72100780227e5c04400065d3c01312d023c60c648001000568eeb2c8b0 language:eng pixel_dimensions:1920x1080 display_dimensions:1920x1080 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:41708398]
+Track ID 1: audio (A_DTS) [number:2 uid:1500554119 codec_id:A_DTS codec_private_length:0 language:eng default_track:1 forced_track:0 enabled_track:1 audio_sampling_frequency:48000 audio_channels:6]
+Track ID 2: subtitles (S_TEXT/UTF8) [number:3 uid:1823251899 codec_id:S_TEXT/UTF8 codec_private_length:0 language:eng default_track:1 forced_track:0 enabled_track:1]
+"""
+
+# Planet remuxed into mp4
+# Planet Earth 'Pole to Pole'
+MKVINFO_PLANET_MP4 = """File '/Users/sean/Downloads/planet.mp4': container: QuickTime/MP4 [is_providing_timecodes:1]
+Track ID 0: video (avc1) [packetizer:mpeg4_p10_video language:und]
+Track ID 1: audio (ac-3) [language:und]
+"""
+
+# Typical recompressed 720p
+# Planet Earth 'Pole to Pole'
+# codec_private_data has been truncated for Planet subtitles and video track
+MKVINFO_PLANET_MKV = """File '/Users/sean/Downloads/planet.mkv': container: Matroska [title:Planet.Earth.EP01.From.Pole.to.Pole.2006.720p.HDDVD.x264-ESiR duration:112832000000 segment_uid:9dfdf4d61d9a001c824ed959632725a4 is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:1 codec_id:V_MPEG4/ISO/AVC codec_private_length:167 codec_private_data:01640033ffe1001867 language:eng track_name:Planet\sEarth\s-\sEP01\s-\sFrom\sPole\sto\sPole pixel_dimensions:1280x720 display_dimensions:1280x720 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:41708398 content_encoding_algorithms:3]
+Track ID 1: audio (A_AC3) [number:2 uid:1935087543 codec_id:A_AC3 codec_private_length:0 language:eng track_name:AC3\s5.1 default_track:1 forced_track:0 enabled_track:1 default_duration:32000000 audio_sampling_frequency:48000 audio_channels:6 content_encoding_algorithms:3]
+Track ID 2: subtitles (S_TEXT/ASS) [number:3 uid:2745533361 codec_id:S_TEXT/ASS codec_private_length:804 codec_private_data:5b5360a0d0a language:eng default_track:1 forced_track:0 enabled_track:1]
+Track ID 3: subtitles (S_TEXT/ASS) [number:4 uid:784888213 codec_id:S_TEXT/ASS codec_private_length:841 codec_private_data:5b5360a0d0a language:rum default_track:0 forced_track:0 enabled_track:1]
+Attachment ID 1: type 'application/x-truetype-font', size 64352 bytes, file name 'exprswy_free.ttf'
+Attachment ID 2: type 'application/x-truetype-font', size 135984 bytes, file name 'Framd.TTF'
+"""
+
+# Common h264 web container and settings
+# Duke Nukem Forever Trailer
+MKVINFO_SHRINKAGE_MP4 = """File '/Users/sean/Downloads/shrinkage.mp4': container: QuickTime/MP4 [is_providing_timecodes:1]
+Track ID 0: video (avc1) [packetizer:mpeg4_p10_video]
+Track ID 1: audio (mp4a)
+"""
+
+# Shrinkage remuxed into mkv
+# Duke Nukem Forever Trailer
+MKVINFO_SHRINKAGE_MKV = """File '/Users/sean/Downloads/shrinkage.mkv': container: Matroska [duration:70036000000 segment_uid:9012b88e3ae8545399260c3c1a4ff087 is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:3769869216 codec_id:V_MPEG4/ISO/AVC codec_private_length:48 codec_private_data:014d401fffe10021674d401f967602802dd80a0400002ef0000afc80d18006ad002ac5ef7c1e1108dc01000468fe3c80 language:und pixel_dimensions:1280x720 display_dimensions:1280x720 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:33382294 content_encoding_algorithms:3]
+Track ID 1: audio (A_AAC) [number:2 uid:1132748215 codec_id:A_AAC codec_private_length:2 codec_private_data:1210 language:und default_track:1 forced_track:0 enabled_track:1 default_duration:23219954 audio_sampling_frequency:44100 audio_channels:2]
+"""
+
+# Common anime combination of h264 and vorbis
+# Some anime
+# Styled and unstyled subs
+# codec_private_data has been truncated for Suzimiya subtitles
+MKVINFO_SUZIMIYA = """File '/Users/sean/Downloads/suzimiya.mkv': container: Matroska [title:The\sMelancholy\sof\sHaruhi\sSuzumiya\c\sSpecial\sEnding duration:71972000000 segment_uid:8a794570c6caa8798bcda561b0d29ed0 is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:1 codec_id:V_MPEG4/ISO/AVC codec_private_length:40 codec_private_data:01640033ffe1001967640033ac34e300b03da1000800000301df851e8f18318c8001000468eebcb0 language:jpn track_name:The\sMelancholy\sof\sHaruhi\sSuzumiya\c\sSpecial\sEnding pixel_dimensions:704x480 display_dimensions:853x480 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:41708375]
+Track ID 1: audio (A_VORBIS) [number:2 uid:3442966448 codec_id:A_VORBIS codec_private_length:4412 codec_private_data:020808 language:jpn track_name:2ch\sVorbis default_track:1 forced_track:0 enabled_track:1 audio_sampling_frequency:48000 audio_channels:2]
+Track ID 2: subtitles (S_TEXT/ASS) [number:3 uid:1455485350 codec_id:S_TEXT/ASS codec_private_length:6681 codec_private_data:5b5 language:eng track_name:Styled\sASS default_track:1 forced_track:0 enabled_track:1]
+Track ID 3: subtitles (S_TEXT/ASS) [number:4 uid:1197227420 codec_id:S_TEXT/ASS codec_private_length:5796 codec_private_data:5ba0d0a language:eng track_name:Styled\sASS\s(Simple) default_track:0 forced_track:0 enabled_track:1]
+Track ID 4: subtitles (S_TEXT/UTF8) [number:5 uid:1212881333 codec_id:S_TEXT/UTF8 codec_private_length:0 language:eng track_name:Plain\sSRT default_track:0 forced_track:0 enabled_track:1]
+Attachment ID 1: type 'application/x-truetype-font', size 66844 bytes, file name 'GosmickSansBold.ttf'
+Attachment ID 2: type 'application/x-truetype-font', size 158380 bytes, file name 'epmgobld_ending.ttf'
+"""
+
+# Rip using ripmaster, renecoded with handbrake. Bluray audio preserved.
+# Up
+# codec_private_data has been truncated for Up subtitles
+MKVINFO_UP = """File '/Users/sean/Downloads/Up.mkv': container: Matroska [duration:5767563000000 segment_uid:8e3ddb4566e67afca3142a25835e9c1d is_providing_timecodes:1]
+Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:1493619965 codec_id:V_MPEG4/ISO/AVC codec_private_length:44 codec_private_data:014d4028ffe1001c674d4028eca03c0113f2e02d4040405000003e90000bb808f183196001000568ef823c80 language:eng pixel_dimensions:1920x1080 display_dimensions:1920x1080 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:41708332 content_encoding_algorithms:3]
+Track ID 1: audio (A_DTS) [number:2 uid:1095497111 codec_id:A_DTS codec_private_length:0 language:eng default_track:1 forced_track:0 enabled_track:1 default_duration:10666666 audio_sampling_frequency:48000 audio_channels:6 content_encoding_algorithms:3]
+Track ID 2: audio (A_DTS) [number:3 uid:1518318168 codec_id:A_DTS codec_private_length:0 language:eng default_track:0 forced_track:0 enabled_track:1 default_duration:10666666 audio_sampling_frequency:48000 audio_channels:6 content_encoding_algorithms:3]
+Track ID 3: subtitles (S_VOBSUB) [number:4 uid:2154180997 codec_id:S_VOBSUB codec_private_length:348 codec_private_data:73693630a language:eng default_track:0 forced_track:0 enabled_track:1 content_encoding_algorithms:0]
+Chapters: 35 entries
+"""
+
 #===============================================================================
 # CLASSES
 #===============================================================================
+
+# Mock Objects =================================================================
+
+class MockMovie(object):
+    def __init__(self, fakePath):
+        self._path = fakePath
+
+    @property
+    def path(self):
+        return self._path
+
+# _trackInfo() =================================================================
+
+class TestTrackInfo(unittest.TestCase):
+    """Tests the private function _trackInfo for correct handling of tracks"""
+
+    #===========================================================================
+    # TESTS
+    #===========================================================================
+
+    def testBadLine(self):
+        """Line that doesn't start with Track ID raises ValueError"""
+
+        self.assertRaises(
+            ValueError,
+            tools._trackInfo,
+            'not a real line'
+        )
+
+    #===========================================================================
+
+    def testBadTrackType(self):
+        """If a line is a Track with an ID but not a known track type"""
+
+        self.assertRaises(
+            ValueError,
+            tools._trackInfo,
+            'Track ID 5: telepathic (junk for the rest'
+        )
+
+    #===========================================================================
+
+    def testSingleDigitTrackID(self):
+        """Tests that track ID is derived correctly for single digit ints"""
+
+        trackLine = _buildTrackLine(5, 'video', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            5,
+            trackID
+        )
+
+    #===========================================================================
+
+    def testDoubleDigitTrackID(self):
+        """Tests that track ID is derived correctly for double digit ints"""
+
+        trackLine = _buildTrackLine(43, 'video', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            43,
+            trackID
+        )
+
+    #===========================================================================
+
+    def testTripleDigitTrackID(self):
+        """Tests that track ID is derived correctly for triple digit ints"""
+
+        trackLine = _buildTrackLine(989, 'video', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            989,
+            trackID
+        )
+
+    #===========================================================================
+
+    def testVideoTrackType(self):
+        """Tests that track type is derived correctly for video"""
+
+        trackLine = _buildTrackLine(0, 'video', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            'video',
+            trackType,
+        )
+
+    #===========================================================================
+
+    def testAudioTrackType(self):
+        """Tests that track type is derived correctly for audio"""
+
+        trackLine = _buildTrackLine(23, 'audio', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            'audio',
+            trackType,
+        )
+
+    #===========================================================================
+
+    def testVideoTrackType(self):
+        """Tests that track type is derived correctly for video"""
+
+        trackLine = _buildTrackLine(967, 'subtitles', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            'subtitles',
+            trackType,
+        )
+
+    #===========================================================================
+
+    def testNoDefaultTrack(self):
+        """Tests that a default_track key is added to the dictionary"""
+
+        trackLine = _buildTrackLine(0, 'video', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertTrue(
+            'default_track' in trackDict.keys()
+        )
+
+        self.assertEqual(
+            trackDict['default_track'],
+            '0'
+        )
+
+    #===========================================================================
+
+    def testNoForcedTrack(self):
+        """Tests that a forced_track key is added to the dictionary"""
+
+        trackLine = _buildTrackLine(20, 'audio', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertTrue(
+            'forced_track' in trackDict.keys()
+        )
+
+        self.assertEqual(
+            trackDict['forced_track'],
+            '0'
+        )
+
+    #===========================================================================
+
+    def testNoLanguage(self):
+        """Tests that a language key is added to the dictionary"""
+
+        trackLine = _buildTrackLine(0, 'video', {'hello': 'goodbye'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertTrue(
+            'language' in trackDict.keys()
+        )
+
+        self.assertEqual(
+            trackDict['language'],
+            'eng'
+        )
+
+    #===========================================================================
+
+    def testDefaultTrackTrue(self):
+        """Tests that a default_track value of 1 is kept"""
+
+        trackLine = _buildTrackLine(0, 'video',
+                                    {'hello': 'goodbye', 'default_track': '1'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertTrue(
+            'default_track' in trackDict.keys()
+        )
+
+        self.assertEqual(
+            trackDict['default_track'],
+            '1'
+        )
+
+    #===========================================================================
+
+    def testForcedTrackTrue(self):
+        """Tests that a forced_track value of 1 is kept"""
+
+        trackLine = _buildTrackLine(20, 'audio',
+                                    {'hello': 'goodbye', 'forced_track': '1'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertTrue(
+            'forced_track' in trackDict.keys()
+        )
+
+        self.assertEqual(
+            trackDict['forced_track'],
+            '1'
+        )
+
+    #===========================================================================
+
+    def testEngLanguage(self):
+        """Tests that a language value other than 'eng' is kept"""
+
+        trackLine = _buildTrackLine(0, 'video',
+                                    {'hello': 'goodbye', 'language': 'ger'})
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertTrue(
+            'language' in trackDict.keys()
+        )
+
+        self.assertEqual(
+            trackDict['language'],
+            'ger'
+        )
+
+    #===========================================================================
+
+    def testTrackDict1(self):
+        """Tests that track dict is derived correctly"""
+
+        goodTrackDict = {
+            "number": "1", "uid": "1493619965",
+            "codec_id": "V_MPEG4/ISO/AVC", "codec_private_length": "44",
+            "codec_private_data": "014d4028ffe1001c80", "language": "eng",
+            "pixel_dimensions": "1920x1080", "display_dimensions": "1920x1080",
+            "default_track": "1", "forced_track": "0", "enabled_track": "1",
+            "packetizer": "mpeg4_p10_video", "default_duration": "41708332",
+            "content_encoding_algorithms": "3"
+        }
+
+        trackLine = _buildTrackLine(0, 'video', goodTrackDict)
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            goodTrackDict,
+            trackDict
+        )
+
+    #===========================================================================
+
+    def testTrackDict2(self):
+        """Tests that track dict is derived correctly"""
+
+        goodTrackDict = {
+            "number": "2", "uid": "3442966448", "codec_id": "A_VORBIS",
+            "codec_private_length": "4412", "codec_private_data": "020808",
+            "language": "jpn", "track_name": "2ch\\sVorbis",
+            "default_track": "1", "forced_track": "0", "enabled_track": "1",
+            "audio_sampling_frequency": "48000", "audio_channels": "2"
+        }
+
+        trackLine = _buildTrackLine(1, 'audio', goodTrackDict)
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            goodTrackDict,
+            trackDict
+        )
+
+    #===========================================================================
+
+    def testTrackDict3(self):
+        """Tests that track dict is derived correctly"""
+
+        goodTrackDict = {
+            "number": "12", "uid": "301356576", "codec_id": "S_TEXT/SSA",
+            "codec_private_length": "783", "codec_private_data": "5b5363726",
+            "language": "slv", "track_name": "Slovenian", "default_track": "0",
+            "forced_track": "0", "enabled_track": "1"
+        }
+
+        trackLine = _buildTrackLine(11, 'subtitles', goodTrackDict)
+
+        trackID, trackType, trackDict = tools._trackInfo(trackLine)
+
+        self.assertEqual(
+            goodTrackDict,
+            trackDict
+        )
+
+# Config =======================================================================
 
 class TestStandardConfigSetup(unittest.TestCase):
     """Tests basic setup of Config"""
@@ -721,8 +1143,110 @@ class TestMissingRequirementsConfig(unittest.TestCase):
             mockOpen.assert_called_once_with('fakeIniFile.ini', 'w')
             mockOpen().write.assert_called_once_with(tools.SAMPLE_CONFIG)
 
+# mkvInfo() ====================================================================
+
+class TestMkvInfoBasic(unittest.TestCase):
+    """Tests basic mkvInfo functionality"""
+
+    #===========================================================================
+    # SETUP & TEARDOWN
+    #===========================================================================
+
+    def setUp(self):
+
+        # Suppress stdout
+        self.held = sys.stdout
+        sys.stdout = StringIO()
+
+        # Build out custom ini file
+        self.sup2Sub = "Z://Program Files (x86)/MKVToolNix/BDSup2Sub.jar"
+        self.handBrake = "Z://Program Files/Handbrake/HandBrakeCLI.exe"
+        self.java = "Z://Program Files (x86)/Java/jre7/bin/java"
+        self.mkvExtract = "Z://Program Files (x86)/MKVToolNix/mkvextract.exe"
+        self.mkvMerge = "Z://Program Files (x86)/MKVToolNix/mkvmerge.exe"
+
+        self.bFrames = '8'
+        self.audioFallback = 'ffac3'
+        self.language = 'English'
+        self.sorting = 'alphabetical'
+        self.sortingReverse = 'no'
+        self.x264Speed = 'slow'
+
+        self.quality = {
+            'uq': {'1080': '20', '720': '19', '480': '16'},
+            'hq': {'1080': '20', '720': '19', '480': '16'},
+            'bq': {'1080': '20', '720': '19', '480': '16'}
+        }
+
+        # Get our formatted ini file
+        self.configFile = _fillConfig(self)
+
+        # Build our config
+        with tempfile.NamedTemporaryFile(mode='r+b') as f:
+            f.write(self.configFile)
+            # Calling readlines on the temp file. Without this Config fails to
+            # read it. I have no idea why.
+            f.readlines()
+            self.config = tools.Config(f.name)
+
+    #===========================================================================
+
+    def tearDown(self):
+        # Restore stdout
+        sys.stdout = self.held
+
+    #===========================================================================
+    # TESTS
+    #===========================================================================
+
+    @mock.patch('tools.PIPE')
+    @mock.patch('tools.Popen')
+    def testPopenCalledCorrectly(self, mockPopen, mockPIPE):
+        """Tests that Popen was called correctly"""
+        mockPopen.stdout.return_value = StringIO()
+        mockPIPE.return_value = StringIO()
+
+        fakeMoviePath = '/the/best/fake/path.mkv'
+
+        movie = MockMovie(fakeMoviePath)
+
+        tools.mkvInfo(movie)
+
+        mockPopen.assert_called_once_with(
+            [self.mkvMerge, '-I', fakeMoviePath],
+            shell=True,
+            stdout=mockPIPE
+        )
+
 #===============================================================================
 # PRIVATE FUNCTIONS
+#===============================================================================
+
+def _buildTrackLine(id, trackType, trackDict):
+    """Builds a mkvMerge -I style track ID line from inputs"""
+    # Our goal is to construct this:
+    # Track ID 0: video (V_MPEG4/ISO/AVC) [number:1 uid:1493619965 codec_id:V_MPEG4/ISO/AVC language:eng pixel_dimensions:1920x1080 display_dimensions:1920x1080 default_track:1 forced_track:0 enabled_track:1 packetizer:mpeg4_p10_video default_duration:41708332 content_encoding_algorithms:3]
+    # From just the id, type and dict. We don't actually care about the codec
+
+    # We need to go from:
+    # {'okay': 'then', 'hello': 'goodbye'}
+    # To:
+    # [okay:then hello:goodbye]
+    trackDict = str(trackDict)
+    trackDict = trackDict[1:-1]  # Remove {}
+    trackDict = trackDict.replace("'", '')
+    trackDict = trackDict.replace(': ', ':')
+    trackDict = trackDict.replace(',', '')
+    trackDict = '[{trackDict}]'.format(trackDict=trackDict)
+
+    trackLine = "Track ID {id}: {trackType} (AWESOME) {trackDict}\r\n".format(
+        id=id,
+        trackType=trackType,
+        trackDict=trackDict
+    )
+
+    return trackLine
+
 #===============================================================================
 
 def _fillConfig(config, bare=False):
