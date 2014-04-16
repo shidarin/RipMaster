@@ -203,7 +203,7 @@ def _trackInfo(line):
     """
     # If we are for some reason fed a line without a TrackID, raise
     if not line.startswith('Track ID'):
-        raise ValueError, line + ' is not a Track ID line.'
+        raise ValueError(line + ' is not a Track ID line.')
 
     # trackID identifies which track this is of the original mkv.
     trackID = int(line.split(':')[0].replace('Track ID ', ''))
@@ -218,11 +218,12 @@ def _trackInfo(line):
     elif ': subtitles (' in line:
         trackType = 'subtitles'
     else:
-        raise ValueError, line + ' does not contain a known track type.'
+        raise ValueError(line + ' does not contain a known track type.')
 
     # By splitting on the opening and removing the closing bracket, we'll
     # be left with only the track dictionary, but it will be in string form.
-    trackDict = line.split('[')[-1].replace(']\r\n', '')
+    trackDict = line.split('[')[-1].replace(']', '')
+    trackDict = trackDict.replace('\r\n', '')
 
     # We need to add " marks around all entries, and comma seperate entries.
     trackDict = trackDict.replace(' ', '", "')
@@ -1176,7 +1177,7 @@ def mkvInfo(movie):
 
     subtitleTracks = []
     audioTracks = []
-    videoTracks = [] # No plans to use video tracks for now
+    videoTracks = []  # No plans to use video tracks for now
 
     for line in info.readlines():
         if line.startswith('Track ID'):
