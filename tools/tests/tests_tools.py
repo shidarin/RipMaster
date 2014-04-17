@@ -223,6 +223,106 @@ Track ID 3: subtitles (S_VOBSUB) [number:4 uid:2154180997 codec_id:S_VOBSUB code
 Chapters: 35 entries
 """
 
+# SubtitleTrack.convertTrack() =================================================
+
+# We've obviously truncated the full return, but this contains all the parts
+# that our stuff looks at.
+SUBTITLES_NO_FORCED = """# 1
+# 2
+# 3
+# 4
+# 5
+# 6
+# 7
+# 8
+# 9
+# 10
+# 1197
+
+Detected 0 forced captions.
+
+Writing /Users/sean/outputjunk.sub
+Decoding frame 1/1197 at offset 0x00000000
+Decoding frame 2/1197 at offset 0x00003800
+Decoding frame 3/1197 at offset 0x00005000
+Decoding frame 4/1197 at offset 0x00007800
+Decoding frame 5/1197 at offset 0x00009000
+Decoding frame 6/1197 at offset 0x0000b800
+Decoding frame 7/1197 at offset 0x0000e000
+Decoding frame 8/1197 at offset 0x00010800
+Decoding frame 9/1197 at offset 0x00012800
+Decoding frame 10/1197 at offset 0x00015800
+Decoding frame 1197/1197 at offset 0x0071c000
+
+Writing /Users/sean/outputjunk.idx
+
+Conversion finished.
+"""
+
+SUBTITLES_SOME_FORCED = """# 1
+# 2
+# 3
+# 4
+# 5
+# 6
+# 7
+# 8
+# 9
+# 10
+# 1197
+
+Detected 30 forced captions.
+
+Writing /Users/sean/outputjunk.sub
+Decoding frame 1/1197 at offset 0x00000000
+Decoding frame 2/1197 at offset 0x00003800
+Decoding frame 3/1197 at offset 0x00005000
+Decoding frame 4/1197 at offset 0x00007800
+Decoding frame 5/1197 at offset 0x00009000
+Decoding frame 6/1197 at offset 0x0000b800
+Decoding frame 7/1197 at offset 0x0000e000
+Decoding frame 8/1197 at offset 0x00010800
+Decoding frame 9/1197 at offset 0x00012800
+Decoding frame 10/1197 at offset 0x00015800
+Decoding frame 1197/1197 at offset 0x0071c000
+
+Writing /Users/sean/outputjunk.idx
+
+Conversion finished.
+"""
+
+SUBTITLES_ALL_FORCED = """# 1
+# 2
+# 3
+# 4
+# 5
+# 6
+# 7
+# 8
+# 9
+# 10
+# 1197
+
+Detected 1197 forced captions.
+
+Writing /Users/sean/outputjunk.sub
+Decoding frame 1/1197 at offset 0x00000000
+Decoding frame 2/1197 at offset 0x00003800
+Decoding frame 3/1197 at offset 0x00005000
+Decoding frame 4/1197 at offset 0x00007800
+Decoding frame 5/1197 at offset 0x00009000
+Decoding frame 6/1197 at offset 0x0000b800
+Decoding frame 7/1197 at offset 0x0000e000
+Decoding frame 8/1197 at offset 0x00010800
+Decoding frame 9/1197 at offset 0x00012800
+Decoding frame 10/1197 at offset 0x00015800
+Decoding frame 1197/1197 at offset 0x0071c000
+
+Writing /Users/sean/outputjunk.idx
+
+Conversion finished.
+"""
+
 #===============================================================================
 # CLASSES
 #===============================================================================

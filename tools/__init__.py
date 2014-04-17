@@ -1048,7 +1048,7 @@ def bdSup2Sub(file, options, dest, popen=False):
             list.
 
     """
-    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' +  options +\
+    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' + options +\
         ' -o "' + dest + '" "' + file + '""'
 
     print ''
