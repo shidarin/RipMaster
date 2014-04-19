@@ -53,6 +53,9 @@ mkvInfo()
     Uses mkvmerge to fetch names, filetypes and trackIDs for all audio, video
     and subtitle tracks from a given mkv.
 
+mkvMerge()
+    Merges a converted movie, converted subtitles and any extracted audio tracks
+
 """
 
 #===============================================================================
@@ -60,15 +63,53 @@ mkvInfo()
 #===============================================================================
 
 # Standard Imports
+from ast import literal_eval
+import ConfigParser
 import os
+from subprocess import Popen, PIPE
 
 #===============================================================================
 # GLOBALS
 #===============================================================================
 
+# Conversion Dictionaries
+BFRAMES = {
+    'ultrafast': 0,
+    'superfast': 3,
+    'veryfast': 3,
+    'faster': 3,
+    'fast': 3,
+    'medium': 3,
+    'slow': 3,
+    'slower': 3,
+    'veryslow': 8,
+    'placebo': 16
+}
+
+# Possible Config Choices
+AUDIO_FALLBACK_DEFAULT = 'ffac3'
+AUDIO_FALLBACKS = [
+    'faac',
+    'ffaac',
+    'ffac3',
+    'lame',
+    'vorbis',
+    'ffflac',
+    ]
+LANGUAGE_DEFAULT = 'English'
+LANGUAGES = ['English']
+SORTING_DEFAULT = 'alphabetical'
+SORTINGS = ['alphabetical', 'quality', 'resolution']
+SORTING_REVERSE_DEFAULT = True
+RESOLUTION_DEFAULT = 1080
 RESOLUTIONS = [1080, 720, 480]
 RESOLUTION_WIDTH = {1080: 1920, 720: 1280, 480: 720}
-QUALITY = ['uq', 'hq', 'bq']
+QUALITY_DEFAULT = 20
+QUALITIES = ['uq', 'hq', 'bq']
+X264_SPEED_DEFAULT = 'slow'
+X264_SPEEDS = BFRAMES.keys()
+
+# Handbrake Settings
 H264_PRESETS = [
     'animation',
     'film',
@@ -79,28 +120,39 @@ H264_PRESETS = [
     'zerolatency'
 ]
 FPS_PRESETS = ['30p', '25p', '24p']
-EXTRACTABLE_AUDIO = ['truehd']
+EXTRACTABLE_AUDIO = ['pcm', 'truehd']
 EXTRACTABLE_SUBTITLE = ['pgs']
-SAMPLE_CONFIG = """Java = C://Program Files (x86)/Java/jre7/bin/java
-BDSupToSub = C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-HandbrakeCLI = C://Program Files/Handbrake/HandBrakeCLI.exe
 
-x264 Speed = slow
-Baseline Quality
-    1080p = 20
-    720p = 20
-    480p = 20
-High Quality
-    1080p = 19
-    720p = 19
-    480p = 19
-Ultra Quality
-    1080p = 16
-    720p = 16
-    480p = 16
+# Generic
+SAMPLE_CONFIG = """[Programs]
+BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+Java: C://Program Files (x86)/Java/jre7/bin/java
+mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-Language = English
-Audio Fallback = ffac3"""
+[Handbrake Settings]
+animation_BFrames: 8
+audio_Fallback: ffac3
+language: English
+sorting: alphabetical
+sorting_Reverse: no
+x264_Speed: slow
+
+[Base Encode Quality]
+1080p: 20
+720p: 20
+480p: 20
+
+[High Encode Quality]
+1080p: 19
+720p: 19
+480p: 19
+
+[Ultra Encode Quality]
+1080p: 16
+720p: 16
+480p: 16"""
 
 #===============================================================================
 # PRIVATE FUNCTIONS
@@ -131,6 +183,63 @@ def _stripAndRemove(string, remove=None):
 
     return stringFinal
 
+def _trackInfo(line):
+    """Takes a track line from mkvmerge -I and returns track information
+
+    Args:
+        line : (str)
+            A single line from mkvmerge -I's result.
+
+    Raises:
+        ValueError
+            Will be raised if line fed to _trackInfo is not a trackID line, or
+            known track type.
+
+    Returns:
+        (int), (str), (dict)
+            The track ID, the track type, and a dictionary
+            with additional information.
+
+    """
+    # If we are for some reason fed a line without a TrackID, raise
+    if not line.startswith('Track ID'):
+        raise ValueError(line + ' is not a Track ID line.')
+
+    # trackID identifies which track this is of the original mkv.
+    trackID = int(line.split(':')[0].replace('Track ID ', ''))
+
+    # The track type is right after the trackID. We'll make sure we find the
+    # actual track type (and not part of a title or other text) by including
+    # the whitespace and punctuation that surrounds it.
+    if ': video (' in line:
+        trackType = 'video'
+    elif ': audio (' in line:
+        trackType = 'audio'
+    elif ': subtitles (' in line:
+        trackType = 'subtitles'
+    else:
+        raise ValueError(line + ' does not contain a known track type.')
+
+    # By splitting on the opening and removing the closing bracket, we'll
+    # be left with only the track dictionary, but it will be in string form.
+    trackDict = line.split('[')[-1].replace(']', '')
+    trackDict = trackDict.replace('\r\n', '')
+
+    # We need to add " marks around all entries, and comma seperate entries.
+    trackDict = trackDict.replace(' ', '", "')
+    trackDict = trackDict.replace(':', '": "')
+    trackDict = '{"' + trackDict + '"}'
+    trackDict = literal_eval(trackDict)
+
+    # Now we need to set some defaults. It's possible the track dictionary
+    # doesn't have these, and we'll be referencing them later.
+
+    trackDict.setdefault('default_track', '0')
+    trackDict.setdefault('forced_track', '0')
+    trackDict.setdefault('language', 'eng')
+
+    return trackID, trackType, trackDict
+
 #===============================================================================
 # CLASSES
 #===============================================================================
@@ -149,12 +258,15 @@ class AudioTrack(object):
             The filetype of this audiotrack.
 
     """
-    def __init__(self, movie, trackID, fileType):
+    def __init__(self, movie, trackID, fileType, infoDict):
         self.movie = movie
         self.trackID = trackID
         self.fileType = fileType
+        self.info = infoDict
         self.extracted = False
         self.extractedAudio = None
+
+        self.default = True if self.info['default_track'] == '1' else False
 
     def extractTrack(self):
         """Extracts the audiotrack this object represents from the parent mkv"""
@@ -194,140 +306,238 @@ class Config(object):
 
     Sample config file:
 
-    Java = C:/Program Files (x86)/Java/jre7/bin/java
-    BDSupToSub = C:/Program Files (x86)/MKVToolNix/BDSup2Sub.jar
-    HandbrakeCLI = C:/Program Files/Handbrake/HandBrakeCLI.exe
+    [Programs]
+    BDSupToSub: C://Program Files (x86)/MKVToolNix/BDSup2Sub.jar
+    HandbrakeCLI: C://Program Files/Handbrake/HandBrakeCLI.exe
+    Java: C://Program Files (x86)/Java/jre7/bin/java
+    mkvExtract: C://Program Files (x86)/MKVToolNix/mkvextract.exe
+    mkvMerge: C://Program Files (x86)/MKVToolNix/mkvmerge.exe
 
-    x264 Speed = slow
-    Baseline Quality
-        1080p = 20
-        720p = 20
-        480p = 20
-    High Quality
-        1080p = 19
-        720p = 19
-        480p = 19
-    Ultra Quality
-        1080p = 16
-        720p = 16
-        480p = 16
+    [Handbrake Settings]
+    animation_BFrames: 8
+    audio_Fallback: ffac3
+    language: English
+    sorting: alphabetical
+    sorting_Reverse: no
+    x264_Speed: slow
 
-    Language = English
-    Audio Fallback = ffac3
+    [Base Encode Quality]
+    1080p: 20
+    720p: 20
+    480p: 20
+
+    [High Encode Quality]
+    1080p: 19
+    720p: 19
+    480p: 19
+
+    [Ultra Encode Quality]
+    1080p: 16
+    720p: 16
+    480p: 16
 
     Leading and trailing whitespaces are automatically removed, but all entries
-    are case sensitive. Make sure there's still a space between the argument
-    and the '=' sign.
+    are case sensitive.
 
     """
 
-    java = ''
-    sup2Sub = ''
-    handBrake = ''
-    x264Speed = 'slow'
-    language = 'English'
-    audioFallback = 'ffac3'
+    config = None
 
+    # Programs
+    handBrake = ''
+    java = ''
+    mkvExtract = ''
+    mkvMerge = ''
+    sup2Sub = ''
+
+    # Handbrake Settings
+    bFrames = None
+    audioFallback = AUDIO_FALLBACK_DEFAULT
+    language = LANGUAGE_DEFAULT
+    sorting = SORTING_DEFAULT
+    sortingReverse = SORTING_REVERSE_DEFAULT
+    x264Speed = X264_SPEED_DEFAULT
+
+    # Encode Qualities
     quality = {'uq': {}, 'hq': {}, 'bq': {}}
 
     def __init__(self, iniFile):
-        self.configExists = False
-        self.checkConfig(iniFile)
-        if self.configExists:
-            self.getSettings(iniFile)
+        # This will either return True or raise an exception
+        if self.checkConfig(iniFile):
+            try:
+                self.getSettings(iniFile)
+            except (ConfigParser.NoOptionError,
+                    ConfigParser.NoSectionError), ex:
+                # NoOptionError strings to:
+                # No option 'djkas' in section: 'Programs'
+                # NoSectionError strings to:
+                # No section: 'Programsss'
+                # Both are index 2
+                error = str(ex).split()[2].replace("'", '')
+
+                if ex.__class__ is ConfigParser.NoOptionError:
+                    exception = 'option'
+                    # We also want to add the section to option errors, so
+                    # we'll pull it from the last index.
+                    error += " from section: "
+                    error += str(ex).split()[-1].replace("'", '')
+                elif ex.__class__ is ConfigParser.NoSectionError:
+                    exception = 'section'
+
+                message = "Missing the ini {type}: {err}. Please fill the " \
+                          "missing options and retry.".format(
+                    type=exception,
+                    err=error
+                )
+                raise ValueError(message)
 
     def checkConfig(self, iniFile):
-        """Checks that the iniFile provided actually exists. Creates if not."""
+        """Checks that the iniFile provided actually exists. Creates if not.
+
+        Args:
+            iniFile : (str)
+                Config File location
+
+        Raises:
+            IOError
+                Raised if config file is missing.
+
+        Returns:
+            If IOError not raised, that means a config file was found and this
+            will return True
+
+        """
         if os.path.exists(iniFile):
-            self.configExists = True
-            return
+            return True
         else:
             with open(iniFile, "w") as f:
                 f.write(SAMPLE_CONFIG)
-            print ""
-            print "PROCESS WILL FAIL"
-            print "You were missing the .ini file. I had to create one for you."
-            print "You'll find it in Ripmaster's folder, called Ripmaster.ini"
-            print "You need to specify the path for" + \
-                  " Java, BDSup2Sub and Handbrake.\n"
-            self.configExists = False
+            errorMsg = "\nPROCESS WILL FAIL\nYou were missing the .ini file. " \
+                       "I had to create one for you. You'll find it in " \
+                       "Ripmaster's folder, called Ripmaster.ini - You need " \
+                       "to specify the path for the various applications\n"
+            raise IOError(errorMsg)
 
-    def getSettings(self, iniFile):
+    @classmethod
+    def getSettings(cls, iniFile):
         """Opens the ini file, splits the lines into a list, and grabs input"""
         print "Reading config from:", iniFile
-        print ""
 
         with open(iniFile, "r") as f:
-            # splitlines() will give us a list of each line.
-            lines = f.read().splitlines()
+            cls.config = ConfigParser.ConfigParser()
+            cls.config.readfp(f)
+            cf = cls.config
 
-            for i in range(len(lines)):
-                # Remove leading whitespace before comparing with startswith()
-                line = lines[i].lstrip()
-                if line.startswith('Java'):
-                    Config.java = _stripAndRemove(
-                        line, 'Java ='
-                    ).replace('\\', '/')
-                elif line.startswith('BDSupToSub'):
-                    Config.sup2Sub = _stripAndRemove(
-                        line, 'BDSupToSub ='
-                    ).replace('\\', '/')
-                elif line.startswith('HandbrakeCLI'):
-                    Config.handBrake = _stripAndRemove(
-                        line, 'HandbrakeCLI ='
-                    ).replace('\\', '/')
-                elif line.startswith('x264 Speed'):
-                    Config.x264Speed = _stripAndRemove(
-                        line, 'x264 Speed ='
-                    )
-                elif line.startswith('Audio Fallback ='):
-                    Config.audioFallback = _stripAndRemove(
-                        line, 'Audio Fallback ='
-                    )
-                elif line.startswith('Baseline Quality'):
-                    Config.quality['bq']['1080'] = int(_stripAndRemove(
-                        lines[i+1], '1080p =')
-                    )
-                    Config.quality['bq']['720'] = int(_stripAndRemove(
-                        lines[i+2], '720p =')
-                    )
-                    Config.quality['bq']['480'] = int(_stripAndRemove(
-                        lines[i+3], '480p =')
-                    )
-                elif line.startswith('High Quality'):
-                    Config.quality['hq']['1080'] = int(_stripAndRemove(
-                        lines[i+1], '1080p =')
-                    )
-                    Config.quality['hq']['720'] = int(_stripAndRemove(
-                        lines[i+2], '720p =')
-                    )
-                    Config.quality['hq']['480'] = int(_stripAndRemove(
-                        lines[i+3], '480p =')
-                    )
-                elif line.startswith('Ultra Quality'):
-                    Config.quality['uq']['1080'] = int(_stripAndRemove(
-                        lines[i+1], '1080p =')
-                    )
-                    Config.quality['uq']['720'] = int(_stripAndRemove(
-                        lines[i+2], '720p =')
-                    )
-                    Config.quality['uq']['480'] = int(_stripAndRemove(
-                        lines[i+3], '480p =')
-                    )
-                elif line.startswith('Language'):
-                    Config.language = _stripAndRemove(line, 'Language =')
+            # Grab all of our 'Programs' settings
+            cat = 'Programs'
+            cls.sup2Sub = cf.get(cat, 'BDSupToSub')
+            cls.handBrake = cf.get(cat, 'HandbrakeCLI')
+            cls.java = cf.get(cat, 'Java')
+            cls.mkvExtract = cf.get(cat, 'mkvExtract')
+            cls.mkvMerge = cf.get(cat, 'mkvMerge')
 
-    def debug(self):
-        """Prints the current configuration"""
-        print "Java at:", Config.java
-        print "BDSup2Sub at:", Config.sup2Sub
-        print "Handbrake at:", Config.handBrake
-        print "x624speed set to:", Config.x264Speed
-        print "Default language:", Config.language
-        print "Audio Codec Fallback:", Config.audioFallback
-        print "Quality dictionary:"
-        for entry in Config.quality:
-            print entry + ":", Config.quality[entry]
+            # Enforce non-blank options
+            programOptions = {
+                'BDSupToSub': cls.sup2Sub,
+                'HandbrakeCLI': cls.handBrake,
+                'Java': cls.java,
+                'mkvExtract': cls.mkvExtract,
+                'mkvMerge': cls.mkvMerge
+            }
+            for option in programOptions:
+                if not programOptions[option]:
+                    raise ConfigParser.NoOptionError(
+                        programOptions[option],
+                        'Programs'
+                    )
+
+            def optionalGet(category, option, default, allowed=None, type=str):
+                """Returns provided default if option not found
+
+                Args:
+                    category : (str)
+                        The settings category to search in
+
+                    option : (str)
+                        The option to search for
+
+                    default : (str|int|bool)
+                        The default value to return if bad/no value found
+
+                    allowed=None : [str|int]
+                        If given, only values found in this list will be
+                        accepted
+
+                    type=str : (<str>|<int>|<bool>)
+                        The type of input we're looking for. Will use a
+                        different get method for each.
+
+                Raises:
+                    N/A
+
+                Returns:
+                    (str|int|bool)
+                        The result found in the config file, or the default if
+                        that isn't found/isn't in the allowed list."""
+                if type == str:
+                    get = cf.get
+                elif type == int:
+                    get = cf.getint
+                elif type == bool:
+                    get = cf.getboolean
+
+                try:
+                    result = get(category, option)
+                except (
+                    ConfigParser.NoOptionError,
+                    ConfigParser.NoSectionError,
+                    ValueError
+                ):
+                    return default
+
+                if allowed and result not in allowed:
+                    return default
+                else:
+                    return result
+
+            cat = 'Handbrake Settings'
+            # All the Handbrake settings are optional, so if the settings
+            # aren't found we just leave it at the default.
+            cls.bFrames = optionalGet(
+                cat, 'animation_BFrames', None, type=int
+            )
+            cls.audioFallback = optionalGet(
+                cat, 'audio_Fallback', AUDIO_FALLBACK_DEFAULT,
+                allowed=AUDIO_FALLBACKS
+            )
+            cls.language = optionalGet(
+                cat, 'language', LANGUAGE_DEFAULT, allowed=LANGUAGES
+            )
+            cls.sorting = optionalGet(
+                cat, 'sorting', SORTING_DEFAULT, allowed=SORTINGS
+            )
+            cls.sortingReverse = optionalGet(
+                cat, 'sorting_Reverse', SORTING_REVERSE_DEFAULT, type=bool
+            )
+            cls.x264Speed = optionalGet(
+                cat, 'x264_Speed', X264_SPEED_DEFAULT, allowed=X264_SPEEDS
+            )
+
+            # Quality catagories are also optional, defaulting to 20.
+            qualityCats =  [
+                'Base Encode Quality',
+                'High Encode Quality',
+                'Ultra Encode Quality',
+            ]
+            qualityLevels = ['bq', 'hq', 'uq']
+            for i in xrange(3):
+                cat = qualityCats[i]
+                level = qualityLevels[i]
+                dict = cls.quality[level]
+
+                dict['1080'] = optionalGet(cat, '1080p', 20, type=int)
+                dict['720'] = optionalGet(cat, '720p', 20, type=int)
+                dict['480'] = optionalGet(cat, '480p', 20, type=int)
 
 class Movie(object):
     """A movie file, with all video, audio and subtitle tracks
@@ -358,8 +568,7 @@ class Movie(object):
 
         self.destination = self.path.replace('.mkv', '--converted.mkv')
 
-        # TODO: We should derive our default res based on the video track
-        self.resolution = 1080
+        self.resolution = None
         self.quality = None
         self.preset = None
         self.tv = False
@@ -377,6 +586,24 @@ class Movie(object):
 
         self._getTracks()
 
+        # If we don't have a resolution from instructions, we need to grab it
+        # from the first video track
+        if not self.resolution:
+            # pixel_dimensions in the video dictionary will return something
+            # formatted like '1920x1080'
+            self.resolution = self.videoTracks[0][1]['pixel_dimensions']
+            self.resolution = int(self.resolution.split('x')[-1])
+            # But if it's not a valid resolution, we'll default to 1080
+            if self.resolution not in RESOLUTIONS:
+                self.resolution = 1080
+
+        # Now that we're gauranteed to have a resolution, we can find the
+        # quality if it wasn't provided.
+        # If our self.quality is in the QUALITY list, it hasn't been set to a
+        # numerical quantity yet.
+        if self.quality in QUALITIES:
+            self.quality = Config.quality[self.quality][str(self.resolution)]
+
         # Progress
 
         self.extracted = False
@@ -393,11 +620,19 @@ class Movie(object):
 
         # This is comparing against global variables at the top of the module
         for size in RESOLUTIONS:
-            if size in instructionSet:
+            if str(size) in instructionSet:
                 self.resolution = size
-        for level in QUALITY:
+        for level in QUALITIES:
             if level in instructionSet:
-                self.quality = Config.quality[level][str(self.resolution)]
+                if self.resolution:
+                    self.quality = Config.quality[level][str(self.resolution)]
+                else:
+                    # This may seem odd- we set the quality to a provided string
+                    # instead of the int stored in the quality dictionary, but
+                    # we have no way of getting that int from the quality dict
+                    # without a provided resolution. Since we have no res, we
+                    # have to wait until we derive the resolution manually.
+                    self.quality = level
         for preset in H264_PRESETS:
             if preset in instructionSet:
                 self.preset = preset
@@ -407,8 +642,6 @@ class Movie(object):
                 self.fps = int(fps.replace('p', ''))
         if 'tv' in instructionSet:
             self.tv = True
-        if not self.quality:
-            self.quality = Config.quality['bq'][str(self.resolution)]
 
     def _getTracks(self):
         """Runs mkvInfo on the file to grab all the tracks, creating them"""
@@ -426,9 +659,9 @@ class Movie(object):
             pass
 
         for track in self.audioTracks:
-            if track.fileType in EXTRACTABLE_AUDIO:
-                if not track.extracted:
-                    track.extractTrack()
+            # We're pulling every audio track present in the source mkv
+            # straight into the final merge mkv, so no need to extract
+            pass
 
         for track in self.subtitleTracks:
             if track.fileType in EXTRACTABLE_SUBTITLE:
@@ -462,6 +695,13 @@ class Movie(object):
         # Encoder Tuning
         if self.preset:
             options += ' --x264-tune {preset}'.format(preset=self.preset)
+            if self.preset == 'animation' and Config.bFrames:
+                # If we've set additional animation bframes in the Config, we'll
+                # add those to the preset's built in bFrames now.
+                bFrames = str(BFRAMES[Config.x264Speed] + int(Config.bFrames))
+                options += ' --encopts bframes={bFrames}'.format(
+                    bFrames=bFrames
+                )
 
         # Encoder Quality
         options += ' -q {quality}'.format(quality=str(self.quality))
@@ -485,30 +725,10 @@ class Movie(object):
         # AUDIO OPTIONS
         #
 
-        passthroughAudio = []
+        # We're no longer doing any audio encoding at the handbrake stage,
+        # instead merging every audio track straight from the original file.
 
-        for track in self.audioTracks:
-            if track.fileType not in EXTRACTABLE_AUDIO:
-                passthroughAudio.append(track)
-
-        if passthroughAudio:
-            options += ' -a '
-
-        for track in passthroughAudio:
-            options += str(track.trackID)
-            if track != passthroughAudio[-1]:
-                options += ','
-            else:
-                options += ' -E '
-        for track in passthroughAudio:
-            options += 'copy'
-            if track != passthroughAudio[-1]:
-                options += ','
-
-        if passthroughAudio:
-            options += ' --audio-fallback {codec}'.format(
-                codec=Config.audioFallback
-            )
+        options += ' -a none'
 
         #
         # PICTURE SETTINGS
@@ -540,6 +760,90 @@ class Movie(object):
 
         self.encoded = True
 
+    def mergeMovie(self):
+        """Uses mkvmerge to merge the movie and extracted/converted tracks"""
+
+        # First we'll set the destination filename by grabbing the movie title,
+        # and the source filename.
+        title = self.subdir.split('__')[0]
+        dFile = '{root}/converted/{title}/{fName}'.format(
+            root=os.getcwd(),
+            title=title,
+            fName=self.fileName
+        )
+
+        totalAudio = 0
+        totalSubs = 0
+
+        vidCommand = []
+        audCommand = []
+        subCommand = []
+
+        subDefault = False
+
+        # We do audio and subtitle commands first to see if we need to set a
+        # new default Audio and Subtitle track
+
+        # We'll be copying all the audio- and only the audio- from the source
+        # file.
+        #audCommand += ' -D -S -B --no-chapters -M --no-global-tags'
+        #audCommand += ' "{path}"'.format(path=self.path)
+        audCommand.extend(['-D', '-S', '-B', '--no-chapters', '-M', '--no-global-tags', self.path])
+
+        # Run through our subtitle tracks
+        for track in self.subtitleTracks:
+            if track.extracted:
+                # Check for default status
+                if track.default and not subDefault:
+                    subCommand.extend(['--default-track', '-1:1'])
+                    subDefault = True
+                else:
+                    subCommand.extend(['--default-track', '-1:0'])
+
+                # Add language flag
+                subCommand.extend(['--language', '-1:{lang}'.format(
+                    lang=track.info['language']
+                )])
+
+                # Deal with forced only tracks
+                if track.forcedOnly:
+                    subCommand.extend(['--forced-track', '-1:1', track.convertedIdxForced])
+                else:
+                    if track.forced:
+                        subCommand.extend(['--forced-track', '-1:1', track.convertedIdxForced])
+
+                        # Add non-default and language flag for non-forced track
+
+                        subCommand.extend(['--default-track', '-1:0', '--language', '-1:{lang}'.format(
+                            lang=track.info['language']
+                        )])
+
+                    # Add non-forced track
+                    subCommand.append(track.convertedIdx)
+
+        # We're going to create a sub-movie that represents the converted
+        # mkv file, to get information on it's subtitle tracks.
+
+        convertedFName = self.fileName.replace('.mkv', '--converted.mkv')
+
+        converted = Movie(self.root, self.subdir, convertedFName)
+
+        if subDefault:
+            for track in converted.subtitleTracks:
+                vidCommand.extend(['--default-track', '{trackID}:0'.format(
+                    trackID=track.trackID
+                )])
+
+        # We'll use -A to exclude any audio tracks that snuck in. There should
+        # not be any.
+        vidCommand.extend(['-A', self.destination])
+
+        command = vidCommand + audCommand + subCommand
+
+        mkvmerge(command, dFile)
+
+        self.merged = True
+
 class SubtitleTrack(object):
     """A single subtitle track.
 
@@ -554,10 +858,11 @@ class SubtitleTrack(object):
             The filetype of this subtitle track.
 
     """
-    def __init__(self, movie, trackID, fileType):
+    def __init__(self, movie, trackID, fileType, infoDict):
         self.movie = movie
         self.trackID = trackID
         self.fileType = fileType
+        self.info = infoDict
         self.extracted = False
         self.extractedSup = None
 
@@ -575,6 +880,9 @@ class SubtitleTrack(object):
         # additional track saved out.
         self.convertedIdxForced = None
         self.convertedSubForced = None
+
+        # Default track means this is the main subtitle track
+        self.default = True if self.info['default_track'] == '1' else False
 
     def extractTrack(self):
         """Extracts the subtitle this object represents from the parent mkv"""
@@ -693,6 +1001,17 @@ class SubtitleTrack(object):
         elif self.forced and self.forcedOnly:
             # If the track is entirely forced subtitles, we'll rename the
             # extracted file to be the _forced file.
+
+            # First we need to see if the file already exists, as renaming
+            # will fail if it does.
+            # If it exists, we'll assume that something went wrong, and
+            # delete it.
+            if os.path.isfile(self.convertedIdxForced):
+                os.remove(self.convertedIdxForced)
+            if os.path.isfile(self.convertedSubForced):
+                os.remove(self.convertedSubForced)
+
+            # Now for the renaming.
             os.rename(self.convertedIdx, self.convertedIdxForced)
             os.rename(self.convertedSub, self.convertedSubForced)
 
@@ -729,7 +1048,7 @@ def bdSup2Sub(file, options, dest, popen=False):
             list.
 
     """
-    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' +  options +\
+    c = '""' + Config.java + '" -jar "' + Config.sup2Sub + '" ' + options +\
         ' -o "' + dest + '" "' + file + '""'
 
     print ''
@@ -796,7 +1115,13 @@ def mkvExtract(file, command, dest):
     '"mkvextract tracks I:/src/fold/file.mkv 3:I:/dest/fold/subtitle.sup "'
 
     """
-    os.system('"mkvextract tracks ' + file + ' ' + command + dest + ' "')
+    # os.system('"mkvextract tracks ' + file + ' ' + command + dest + ' "')
+    os.system('""{mkvExtract}" tracks "{file}" {command}{dest} "'.format(
+        mkvExtract=Config.mkvExtract,
+        file=file,
+        command=command,
+        dest=dest
+    ))
 
 def mkvInfo(movie):
     """Uses CLI to fetch names all audio, video and subtitle tracks from a mkv
@@ -818,64 +1143,96 @@ def mkvInfo(movie):
     file = movie.path
 
     # mkvMerge will return a listing of each track
-    # TODO: Remove deprecated popen
-    info = os.popen('"mkvmerge -i ' + file + '"').read()
-    info = info.split('\n')
+    info = Popen(
+        [Config.mkvMerge, '-I', file],
+        shell=True,
+        stdout=PIPE
+    ).stdout
 
-    # info is now a list, each entry a line
+    # info is now a file object, each entry a line
     #
     # Example:
     #
-    # File 'I:\Rips\RawBR\Jack_Reacher\Jack_Reacher_t01.mkv': container: Matroska
-    # Track ID 0: video (V_MPEG4/ISO/AVC)
-    # Track ID 1: audio (A_AC3)
-    # Track ID 2: audio (A_TRUEHD)
-    # Track ID 3: subtitles (S_HDMV/PGS)
+    # File 'I:\Ripmaster\toConvert\JR__1080\JR_t01.mkv': container: Matroska []
+    # Track ID 0: video (V_MPEG4/ISO/AVC) [...]
+    # Track ID 1: audio (A_AC3) [...]
+    # Track ID 2: audio (A_TRUEHD) [...]
+    # Track ID 3: subtitles (S_HDMV/PGS) [...]
 
     AUDIO_TYPES = {
-        '(A_AAC)\r': 'aac',
-        '(A_DTS)\r': 'dts',
-        '(A_AC3)\r': 'ac3',
-        '(A_TRUEHD)\r': 'truehd',
-        '(A_MP3)\r': 'mp3',
-        '(A_MS/ACM)\r': 'acm',
-        '(A_PCM/INT/LIT)\r': 'pcm'
+        'A_AAC': 'aac',
+        'A_DTS': 'dts',
+        'A_AC3': 'ac3',
+        'A_EAC3': 'aec3',
+        'A_TRUEHD': 'truehd',
+        'A_MP3': 'mp3',
+        'A_MS/ACM': 'acm',
+        'A_PCM/INT/LIT': 'pcm'
         }
 
     SUBTITLE_TYPES = {
-        '(S_VOBSUB)\r': 'vobsub',
-        '(S_HDMV/PGS)\r': 'pgs'
+        'S_VOBSUB': 'vobsub',
+        'S_HDMV/PGS': 'pgs'
         }
-
-    trackList = []
-
-    for line in info:
-        if 'Track ID' in line:
-            trackList.append(line)
-
-    # trackList now only contains the lines with Track in them
 
     subtitleTracks = []
     audioTracks = []
-    videoTracks = [] # No plans to use video tracks for now
+    videoTracks = []  # No plans to use video tracks for now
 
-    for line in trackList:
-         # Splitting on ':' gives us the ID on one side, the type on the other
-        lineList = line.split(':')
+    for line in info.readlines():
+        if line.startswith('Track ID'):
+            trackID, trackType, trackDict = _trackInfo(line)
 
-        if 'subtitles' in lineList[1]:
-            trackID = int(lineList[0].replace('Track ID ', ''))
-            fileType = SUBTITLE_TYPES[lineList[1].replace(' subtitles ', '')]
-            track = SubtitleTrack(movie, trackID, fileType)
-            subtitleTracks.append(track)
-
-        elif 'audio' in lineList[1]:
-            trackID = int(lineList[0].replace('Track ID ', ''))
-            fileType = AUDIO_TYPES[lineList[1].replace(' audio ', '')]
-            track = AudioTrack(movie, trackID, fileType)
-            audioTracks.append(track)
-
-        elif 'video' in lineList[1]:
-            videoTracks.append(int(lineList[0].replace('Track ID ', '')))
+            if trackType == 'video':
+                # Since video tracks aren't really used right now, we'll just
+                # throw this stuff into a list.
+                videoTracks.append([trackID, trackDict])
+            elif trackType == 'audio':
+                fileType = AUDIO_TYPES[trackDict['codec_id']]
+                track = AudioTrack(movie, trackID, fileType, trackDict)
+                audioTracks.append(track)
+            elif trackType == 'subtitles':
+                fileType = SUBTITLE_TYPES[trackDict['codec_id']]
+                track = SubtitleTrack(movie, trackID, fileType, trackDict)
+                subtitleTracks.append(track)
 
     return videoTracks, audioTracks, subtitleTracks
+
+def mkvmerge(command, dest):
+    """CLI command builder for merging tracks with mkvmerge
+
+    Args:
+        command : (str)
+            The command to be executed. Source files must be included within
+            this command.
+
+        dest : (str)
+            The destination file to be written to.
+
+    Raises:
+        N/A
+
+    Returns:
+        None
+
+    """
+
+    #c = Config.mkvMerge + " -o " + dest + command
+    #c = '"{mkvMerge}" -o {dest}{command}'.format(
+    #    mkvMerge=Config.mkvMerge,
+    #    dest=dest,
+    #    command=command
+    #)
+    commands = [Config.mkvMerge, '-o']
+    commands.append(dest)
+    commands.extend(command)
+
+    print
+    print commands
+    print
+
+    from subprocess import check_call
+    try:
+        check_call(commands)
+    except:
+        raw_input("oops")
