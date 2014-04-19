@@ -23,8 +23,8 @@ automated ripping. However, in my experience this process requires so much hand
 holding (having to pick the right track, etc.) that it's better just to do it
 manually.
 
-After that, Ripmaster extracts subtitles and supported audio tracks from the MKV
-(since Handbrake cannot handle those directly).
+After that, Ripmaster extracts subtitles from the MKV (since Handbrake cannot
+handle those directly).
 
 Ripmaster uses BDSupToSub to convert the subtitle sup files into a matching IDX
 and SUB pair, while also checking for 'forced' subtitles. If it finds forced
@@ -34,14 +34,13 @@ subtitles, the 'normal' IDX and SUB pair are not created from that track,
 leaving only the 'forced' result.
 
 Handbrake then converts the video track, compressing it according to user
-specified criteria, and auto-passing through all audio tracks (except audio
-tracks (like trueHD), which it cannot handle).
+specified criteria. The converted mkv has no audio tracks, as all ripped
+audio tracks are passed unmolested from the rip to the final mkv.
 
-Finally, we call mkvmerge to take all resulting files (IDX-SUB subtitles,
-extracted audio (if present) and the converted video), and merges them together,
-setting flags on 'forced' tracks correctly, and setting extracted audio as the
-default audio track if it's present (since these tracks are usually the highest
-quality). NOTE: This is not available in this alpha release.
+Finally, mkvmerge takes all resulting files (the original rip with audio, the
+IDX-SUB subtitles, and the converted video), and merges them together, setting
+flags on 'forced' tracks correctly, and maintaining default/forced flags on the
+rest of the tracks.
 
 If at any point in the process the computer crashes (normally during the
 Handbrake encoding), Ripmaster starts from the last completed task.
@@ -61,8 +60,8 @@ The following programs are required for Ripmaster to run:
 While you can rip to an MKV file using whatever you wish, MakeMKV is probably
 the best option: http://www.makemkv.com/
 
-User's need to edit Ripmaster.ini and enter the paths to BDSupToSub, Java and
-HandBrakeCLI.
+User's need to edit Ripmaster.ini and enter the paths to BDSupToSub, Java,
+HandBrakeCLI, mkvMerge, mkvExtract.
 
 Users should also set their desired x264 speed, available options are:
 
@@ -75,8 +74,6 @@ Users should also set their desired x264 speed, available options are:
     slow (default)
     slower
     veryslow
-
-Default: slow
 
 If you desire a fallback audio other than AC3, you should set that here too.
 Options for fallback audio are:
@@ -167,8 +164,9 @@ You at least need a resolution, accepted arguments for this are:
 
     1080, 720, 480
 
-If you don't provide a target resolution, it defaults to 1080 (although in the
-future it will try and pass through the incoming resolution).
+If you don't provide a target resolution, it tries to query the audio track to
+resolve the image resolution and use that. If that resolve fails, we default to
+1080.
 
 QUALITY:
 
