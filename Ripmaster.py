@@ -318,6 +318,7 @@ def _sort_movies(movies, sorting, reverse):
 # MAIN
 #===============================================================================
 
+
 def main():
     """Main app process. This controls every step of the process"""
     # TODO: Allow users to supply alt configs?
@@ -328,9 +329,6 @@ def main():
     except (IOError or ValueError), ex:
         print ex
         return
-
-    config.debug()
-    print
 
     root = os.getcwd() + '/toConvert/'
 
