@@ -423,8 +423,11 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception, err:
-        print err
+    except Exception as err:
+        import traceback
+        print('Unexpected error encountered:')
+        print(err)
+        print(traceback.format_exc())
         raw_input('Press enter key to exit')
 
 # Keep the shell up to show results
