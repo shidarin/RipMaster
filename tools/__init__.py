@@ -571,7 +571,8 @@ class Movie(object):
         self.resolution = None
         self.quality = None
         self.preset = None
-        self.tv = False
+        self.tv = False  # Used for interlacing
+        self.pa = False  # Preserve Aspect
         self.fps = None
 
         self._getInstructions()
@@ -618,6 +619,8 @@ class Movie(object):
         except IndexError: # No '__' present in filename
             instructionSet = []
 
+        instructionSet = [entry.lower() for entry in instructionSet]
+
         # This is comparing against global variables at the top of the module
         for size in RESOLUTIONS:
             if str(size) in instructionSet:
@@ -642,6 +645,8 @@ class Movie(object):
                 self.fps = int(fps.replace('p', ''))
         if 'tv' in instructionSet:
             self.tv = True
+        if 'pa' in instructionSet:
+            self.pa = True
 
     def _getTracks(self):
         """Runs mkvInfo on the file to grab all the tracks, creating them"""
@@ -737,6 +742,11 @@ class Movie(object):
         options += ' -w {width} --loose-anamorphic'.format(
             width=str(RESOLUTION_WIDTH[self.resolution])
         )
+
+        if self.pa:
+            # If we're preserving the aspect ratio, stop Handbrake from
+            # automatically cropping.
+            options += ' --crop 0:0:0:0'
 
         #
         # FILTERS
