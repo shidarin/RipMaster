@@ -682,8 +682,9 @@ class Movie(object):
         # read?
 
         for track in self.subtitleTracks:
-            if not track.converted:
-                track.convertTrack()
+            if track.fileType in EXTRACTABLE_SUBTITLE:
+                if not track.converted:
+                    track.convertTrack()
 
         self.converted = True
 
