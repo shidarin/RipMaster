@@ -583,8 +583,6 @@ class Movie(object):
         self.audioTracks = []
         self.subtitleTracks = []
 
-        self.vobsub = False
-
         self._getTracks()
 
         # If we don't have a resolution from instructions, we need to grab it
@@ -760,12 +758,11 @@ class Movie(object):
         # SUBTITLES
         #
 
+        sub_count = 0
         for track in self.subtitleTracks:
+            sub_count += 1
             if track.fileType == 'vobsub':
-                self.vobsub = True
-
-        if self.vobsub:
-            options += ' -N {lang} -s scan'.format(lang=Config.language)
+                options += ' -s {sub_count}'.format(sub_count=sub_count)
 
         handBrake(self.path, options, self.destination)
 
@@ -797,8 +794,6 @@ class Movie(object):
 
         # We'll be copying all the audio- and only the audio- from the source
         # file.
-        #audCommand += ' -D -S -B --no-chapters -M --no-global-tags'
-        #audCommand += ' "{path}"'.format(path=self.path)
         audCommand.extend(['-D', '-S', '-B', '--no-chapters', '-M', '--no-global-tags', self.path])
 
         # Run through our subtitle tracks
@@ -847,6 +842,9 @@ class Movie(object):
 
         # We'll use -A to exclude any audio tracks that snuck in. There should
         # not be any.
+        #
+        # However, it will pick up on any vobsub tracks that handbrake
+        # converted.
         vidCommand.extend(['-A', self.destination])
 
         command = vidCommand + audCommand + subCommand
